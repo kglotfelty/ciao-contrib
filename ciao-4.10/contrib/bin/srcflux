@@ -313,7 +313,13 @@ def save_regions( myparams, regions, flavor ):
     """    
     from ciao_contrib.runtool import dmmakereg
     from tempfile import NamedTemporaryFile    
-    ss = stk.build(regions)
+
+    # CIAO 4.10 changes to NULL regions no longer creates a fake
+    # "point(0,0)" -- I'm using that so we'll put it back.
+    try:
+        ss = stk.build(regions)
+    except ValueError as ve:
+        ss = [ "point(0,0)" ]
     
     with open( regions[2:], "w" ) as oo:  # 2 => skip "@-"
         for ii in range( len(ss)):
@@ -1491,10 +1497,12 @@ def get_nh_from_colden( myparams, token, at_energy, ii ):
     """
     Get NH value by running colden
     """
+
     from ciao_contrib.proptools import colden
     myroot = get_root( myparams, at_energy )    
     ra = get_single_keyword(myroot+"{}[#row={}]".format(__osuf__,ii), "rapos")
     dec = get_single_keyword(myroot+"{}[#row={}]".format(__osuf__,ii), "decpos")
+    
     
     if token.startswith("%NRAO") or token.startswith("%GAL"):
         nh = colden(ra,dec,dataset="nrao")
@@ -1510,7 +1518,7 @@ def get_nh_from_colden( myparams, token, at_energy, ii ):
     return nh
     
 
-def replace_nh_tokens( myparams, at_energy, ii ):
+def replace_nh_tokens( myparams, at_energy, ii, pi_file ):
     """
     Look for and replace any special %*_NH% tokens in the 
     model parameter strings.
@@ -1522,12 +1530,18 @@ def replace_nh_tokens( myparams, at_energy, ii ):
 
     from pycrates import read_file
 
+    if pi_file is None:
+        pi = myparams.outroot+"_{:04d}.pi".format(ii)
+        if not os.path.exists(pi):
+            pi = None
+    else:
+        pi = pi_file
+
     def lookup_value( key, modelparam ):
         token = '%{}%'.format(key)
         if token not in modelparam:
             return modelparam
             
-        pi = myparams.outroot+"_{:04d}.pi".format(ii)
         if not os.path.exists(pi):
             verb1("Cannot locate spectrum file, will try to get from colden")
             nh = get_nh_from_colden( myparams, token, at_energy, ii )
@@ -1553,7 +1567,7 @@ def replace_nh_tokens( myparams, at_energy, ii ):
     return mparams, absparams
 
 
-def run_modelflux( myparams, at_energy, outroot, src, bkg, ii, make_resp, inarf, inrmf ):
+def run_modelflux( myparams, at_energy, outroot, src, bkg, ii, make_resp, inarf, inrmf, inpi ):
     """
     Run the modelflux script to get the conversion factor
     from a 1 c/s rate to the model flux in the
@@ -1588,9 +1602,15 @@ def run_modelflux( myparams, at_energy, outroot, src, bkg, ii, make_resp, inarf,
             write_none( outroot )
             return
 
+        pi = myparams.outroot+"_{:04d}.pi".format(ii)
+        if not os.path.exists( arf ):
+            write_none( outroot )
+            return
+
     else:
         arf = inarf
         rmf = inrmf
+        pi = inpi
 
     verb1("Running modeflux for region {}".format(ii))
 
@@ -1603,7 +1623,7 @@ def run_modelflux( myparams, at_energy, outroot, src, bkg, ii, make_resp, inarf,
         elo = 0.1
         ehi = 10.0
 
-    mparams, absparams = replace_nh_tokens( myparams, at_energy, ii )
+    mparams, absparams = replace_nh_tokens( myparams, at_energy, ii, pi )
 
     modelflux = make_tool("modelflux")
     modelflux.arf = arf
@@ -1716,7 +1736,7 @@ def get_model_flux( taskrunner, myparams, at_energy, src, bkg, make_resp ):
         outroot = myroot+"_{:04d}.dat".format(ii+1)
         taskrunner.add_task( outroot, "", run_modelflux, myparams, 
             at_energy, outroot, src_stk[ii], bkg_stk[ii], ii+1, make_resp,
-            arfs[ii], rmfs[ii] )
+            arfs[ii], rmfs[ii], None )
         infiles.append( delme(outroot) )
 
     return infiles
@@ -1832,8 +1852,10 @@ def merge_modelflux( stk_params, myparams ):
 
         pi_files = [ p.outroot+"_{:04d}.pi".format(snum+1) for p in stk_params ]
         arf_files = [ p.outroot+"_{:04d}_nopsf.arf".format(snum+1) for p in stk_params ]
+        rmf_files = [ p.outroot+"_{:04d}.rmf".format(snum+1) for p in stk_params ]
         combine_spectra.src_spectra=[x for x in pi_files if os.path.exists(x)]
         combine_spectra.src_arf=[x for x in arf_files if os.path.exists(x)]
+        combine_spectra.src_rmf=[x for x in rmf_files if os.path.exists(x)]
         combine_spectra.outroot = myparams.outroot+"_{:04d}".format(snum+1)
         combine_spectra.clobber=True
         vv = combine_spectra()
@@ -1843,10 +1865,11 @@ def merge_modelflux( stk_params, myparams ):
         verb2("Running model_flux")
         out_arf = combine_spectra.outroot+"_src.arf"
         out_rmf = combine_spectra.outroot+"_src.rmf"
+        out_pi = combine_spectra.outroot+"_src.pi"
         for at_energy in bands:
             myroot = get_root( myparams, at_energy )
             outroot = myroot+"_{:04d}.dat".format(snum+1)
-            run_modelflux( myparams, at_energy, outroot, None, None, snum+1, False, out_arf, out_rmf )
+            run_modelflux( myparams, at_energy, outroot, None, None, snum+1, False, out_arf, out_rmf, out_pi )
             tab = read_file( outroot )
             outfiles[at_energy]["mflux_cnv"].append( tab.get_column("MFLUX_CNV").values[0] )
             outfiles[at_energy]["umflux_cnv"].append( tab.get_column("UMFLUX_CNV").values[0] )
@@ -2558,13 +2581,13 @@ def main():
         summarize_results( myparams, obi=None, single=True )
         return
 
-    #merged_fluxes = merge_counts( stk_pars, myparams) 
-    #modelflux_vals = merge_modelflux( stk_pars, myparams )
-    #merge_write_output( stk_pars, myparams, modelflux_vals, merged_fluxes)
+    merged_fluxes = merge_counts( stk_pars, myparams) 
+    modelflux_vals = merge_modelflux( stk_pars, myparams )
+    merge_write_output( stk_pars, myparams, modelflux_vals, merged_fluxes)
 
     for ii,ss in enumerate(stk_pars):
         summarize_results( ss, obi=ii, single=False )
-    #summarize_results( myparams, obi=None, single=False )
+    summarize_results( myparams, obi=None, single=False )
     
     
 
