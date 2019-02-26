@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/bash
 # 
 #  Copyright (C) 2004-2008  Smithsonian Astrophysical Observatory
 #
@@ -48,5 +48,5 @@ cat - | dmimgproject -"${regions}" - $axis > \
   $ASCDS_WORK_PATH/$$_project.fits
 
 
-ds9_plot.py "$ASCDS_WORK_PATH/$$_project.fits[cols ${axis},${stat}]" "Project ${stat} Profile" $ds9
+nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_project.fits[cols ${axis},${stat}]" "Project ${stat} Profile" $ds9 &> /dev/null &
 

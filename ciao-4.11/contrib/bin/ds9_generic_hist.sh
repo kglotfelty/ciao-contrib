@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/bash
 # 
 #  Copyright (C) 2004-2008  Smithsonian Astrophysical Observatory
 #
@@ -63,9 +63,9 @@ dmextract "${src}[bin ${bincol}=${binspec}]" - op=$ftype  bkg="${bkg}" | \
  dmgroup - -  $grptype grouptypeval=$grpval binspec="" xcolumn=$bincol ycol=$grpcol 2> /dev/null > \
   $ASCDS_WORK_PATH/$$_hist.fits 
 
-
-ds9_plot.py "$ASCDS_WORK_PATH/$$_hist.fits[grouping=0:][cols ${bincol},counts=GRP_DATA]" "$ftype" $ds9
-
 /bin/rm -f $ASCDS_WORK_PATH/$$_src.reg $ASCDS_WORK_PATH/$$_bkg.reg
+
+nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_hist.fits[grouping=0:][cols ${bincol},counts=GRP_DATA]" "$ftype" $ds9 &> /dev/null &
+
 
 exit 0

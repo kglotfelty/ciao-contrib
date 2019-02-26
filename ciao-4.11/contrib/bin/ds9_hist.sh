@@ -1,4 +1,4 @@
-#! /bin/sh 
+#!/bin/bash 
 # 
 #  Copyright (C) 2004-2008  Smithsonian Astrophysical Observatory
 #
@@ -96,4 +96,4 @@ dmextract "${file}${src}[bin ${hist}=${min}:${max}:${step}]" - op=$type \
 
 
 
-ds9_plot.py "$ASCDS_WORK_PATH/$$_${hist}.fits[cols $hist,$outcol]" "$hist" $ds9
+nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_${hist}.fits[cols $hist,$outcol]" "$hist" $ds9 &> /dev/null &

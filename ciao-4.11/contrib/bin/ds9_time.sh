@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 # 
 #  Copyright (C) 2004-2008  Smithsonian Astrophysical Observatory
 #
@@ -56,9 +56,7 @@ case $hist in
     pfold "${file}${src}" - "${min}:${max}:1" > \
 	${ASCDS_WORK_PATH}/$$_period.fits
 
-    ds9_plot.py "$ASCDS_WORK_PATH/$$_period.fits[cols period,sigma_rate]" "Period Fold" $ds9 2>&1 > /dev/null 
-
-    /bin/rm -f $ASCDS_WORK_PATH/$$_period.fits
+    nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_period.fits[cols period,sigma_rate]" "Period Fold" $ds9 &> /dev/null &
 
     ;;
     
@@ -69,9 +67,7 @@ case $hist in
 
     /bin/rm -f  $ASCDS_WORK_PATH/$$_foo.fits
 
-    ds9_plot.py "$ASCDS_WORK_PATH/$$_lc.fits[cols time,count_rate]" "GL Lightcurve" $ds9 2>&1 > /dev/null
-
-    /bin/rm -f $ASCDS_WORK_PATH/$$_lc.fits
+    nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_lc.fits[cols time,count_rate]" "GL Lightcurve" $ds9  &> /dev/null &
 
         ;;
 esac

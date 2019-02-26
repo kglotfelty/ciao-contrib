@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/bash
 # 
 #  Copyright (C) 2004-2008,2015  Smithsonian Astrophysical Observatory
 #
@@ -40,9 +40,8 @@ dmextract "${file}[bin sky=@$ASCDS_WORK_PATH/$$_ds9.reg]" - op=generic | \
   dmtcalc - - expr="radius=r[0]" > \
   $ASCDS_WORK_PATH/$$_radial.fits
 
-ds9_plot.py "$ASCDS_WORK_PATH/$$_radial.fits[cols radius,sur_bri]" "Radial Profile" $xpa
-
-
 \rm -f $ASCDS_WORK_PATH/$$_ds9.reg
+
+nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_radial.fits[cols radius,sur_bri]" "Radial Profile" $xpa &> /dev/null &
 
 exit 0
