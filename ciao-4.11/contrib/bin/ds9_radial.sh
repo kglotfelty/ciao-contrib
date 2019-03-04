@@ -40,8 +40,9 @@ dmextract "${file}[bin sky=@$ASCDS_WORK_PATH/$$_ds9.reg]" - op=generic | \
   dmtcalc - - expr="radius=r[0]" > \
   $ASCDS_WORK_PATH/$$_radial.fits
 
-\rm -f $ASCDS_WORK_PATH/$$_ds9.reg
 
-nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_radial.fits[cols radius,sur_bri]" "Radial Profile" $xpa &> /dev/null &
+ds9_plot_blt "$ASCDS_WORK_PATH/$$_radial.fits[cols radius,sur_bri]" "Radial Profile" $xpa
+
+\rm -f $ASCDS_WORK_PATH/$$_ds9.reg
 
 exit 0

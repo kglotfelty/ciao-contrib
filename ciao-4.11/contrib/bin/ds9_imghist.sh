@@ -36,4 +36,4 @@ cat - | dmimghist -"$regions" - 1 > \
  $ASCDS_WORK_PATH/$$_hist.fits
 
 
-nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_hist.fits[cols bin,counts]" "Pixel Histogram" $ds9 &> /dev/null &
+ds9_plot_blt "$ASCDS_WORK_PATH/$$_hist.fits[cols bin,counts]" "Pixel Histogram" $ds9

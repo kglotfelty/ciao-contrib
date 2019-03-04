@@ -23,12 +23,6 @@ import sys
 import os
 import subprocess
 
-
-infile="/soft/ciao/test/smoke/data/tools-dme2.fits[cols time,count_rate]"
-title="plotit"
-access_point="ds9"
-
-
 def load_data(infile):
 
     from pycrates import read_file
@@ -44,6 +38,13 @@ def load_data(infile):
 
     x_vals,x_label = get_col(0)
     y_vals,y_label = get_col(1)
+
+    import numpy as np
+    good = np.isfinite(y_vals)
+    good = np.logical_and(good, np.isfinite(x_vals))
+    
+    x_vals = x_vals[good]
+    y_vals = y_vals[good]
 
     return x_vals,x_label,y_vals,y_label
 

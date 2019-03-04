@@ -48,5 +48,5 @@ cat - | dmimgproject -"${regions}" - $axis > \
   $ASCDS_WORK_PATH/$$_project.fits
 
 
-nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_project.fits[cols ${axis},${stat}]" "Project ${stat} Profile" $ds9 &> /dev/null &
+ds9_plot_blt "$ASCDS_WORK_PATH/$$_project.fits[cols ${axis},${stat}]" "Project ${stat} Profile" $ds9
 

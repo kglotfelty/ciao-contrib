@@ -95,5 +95,4 @@ dmextract "${file}${src}[bin ${hist}=${min}:${max}:${step}]" - op=$type \
   $ASCDS_WORK_PATH/$$_${hist}.fits
 
 
-
-nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_${hist}.fits[cols $hist,$outcol]" "$hist" $ds9 &> /dev/null &
+ds9_plot_blt "$ASCDS_WORK_PATH/$$_${hist}.fits[cols $hist,$outcol]" "$hist" $ds9

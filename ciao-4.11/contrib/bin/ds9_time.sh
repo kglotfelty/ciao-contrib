@@ -56,7 +56,7 @@ case $hist in
     pfold "${file}${src}" - "${min}:${max}:1" > \
 	${ASCDS_WORK_PATH}/$$_period.fits
 
-    nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_period.fits[cols period,sigma_rate]" "Period Fold" $ds9 &> /dev/null &
+    ds9_plot_blt "$ASCDS_WORK_PATH/$$_period.fits[cols period,sigma_rate]" "Period Fold" $ds9
 
     ;;
     
@@ -67,7 +67,7 @@ case $hist in
 
     /bin/rm -f  $ASCDS_WORK_PATH/$$_foo.fits
 
-    nohup ds9_plot_matplotlib "$ASCDS_WORK_PATH/$$_lc.fits[cols time,count_rate]" "GL Lightcurve" $ds9  &> /dev/null &
+    ds9_plot_blt "$ASCDS_WORK_PATH/$$_lc.fits[cols time,count_rate]" "GL Lightcurve" $ds9 
 
         ;;
 esac
