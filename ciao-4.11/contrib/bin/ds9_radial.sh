@@ -36,13 +36,21 @@ fi
 xpaget $xpa regions -format ds9 -system physical | cut -d"#" -f1 | sed 's, *$,,' | \
   awk -f $ASCDS_CONTRIB/config/ds9_region_expand.awk > $ASCDS_WORK_PATH/$$_ds9.reg
 
-dmextract "${file}[bin sky=@$ASCDS_WORK_PATH/$$_ds9.reg]" - op=generic | \
-  dmtcalc - - expr="radius=r[0]" > \
-  $ASCDS_WORK_PATH/$$_radial.fits
+dmextract "${file}[bin sky=@$ASCDS_WORK_PATH/$$_ds9.reg]" op=generic \
+  outfile=$ASCDS_WORK_PATH/$$_radial.fits
 
 
-ds9_plot_blt "$ASCDS_WORK_PATH/$$_radial.fits[cols radius,sur_bri]" "Radial Profile" $xpa
+
+ds9_plot_blt "$ASCDS_WORK_PATH/$$_radial.fits[cols rmid,sur_bri]" "Radial Profile $$_radial.fits" $xpa
 
 \rm -f $ASCDS_WORK_PATH/$$_ds9.reg
+
+echo "-----------------------------"
+echo `date`
+echo ""
+echo "infile: ${file}"
+echo "outfile: $ASCDS_WORK_PATH/$$_radial.fits"
+echo ""
+
 
 exit 0

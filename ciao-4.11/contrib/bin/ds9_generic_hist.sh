@@ -64,8 +64,21 @@ dmextract "${src}[bin ${bincol}=${binspec}]" - op=$ftype  bkg="${bkg}" | \
   $ASCDS_WORK_PATH/$$_hist.fits 
 
 
-ds9_plot_blt "$ASCDS_WORK_PATH/$$_hist.fits[grouping=0:][cols ${bincol},counts=GRP_DATA]" "$ftype" $ds9
+ds9_plot_blt "$ASCDS_WORK_PATH/$$_hist.fits[grouping=0:][cols ${bincol},counts=GRP_DATA]" "$ftype , $$_hist.fits" $ds9
 
 /bin/rm -f $ASCDS_WORK_PATH/$$_src.reg $ASCDS_WORK_PATH/$$_bkg.reg
+
+
+
+
+echo "-----------------------------"
+echo `date`
+echo ""
+echo "infile: ${file}"
+echo "outfile: $ASCDS_WORK_PATH/$$_hist.fits"
+echo ""
+
+
+
 
 exit 0

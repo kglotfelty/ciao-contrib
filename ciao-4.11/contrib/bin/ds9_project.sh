@@ -48,5 +48,16 @@ cat - | dmimgproject -"${regions}" - $axis > \
   $ASCDS_WORK_PATH/$$_project.fits
 
 
-ds9_plot_blt "$ASCDS_WORK_PATH/$$_project.fits[cols ${axis},${stat}]" "Project ${stat} Profile" $ds9
+ds9_plot_blt "$ASCDS_WORK_PATH/$$_project.fits[cols ${axis},${stat}]" "Project ${stat} Profile $$_project.fits" $ds9
 
+file=`xpaget $ds9 file name `
+file=`basename "${file}"`
+file=`echo "${file}" | cut -d"[" -f1`
+
+echo "-----------------------------"
+echo `date`
+echo ""
+echo "infile: ${file}"
+echo "region: ${reg}"
+echo "outfile: $ASCDS_WORK_PATH/$$_project.fits"
+echo ""

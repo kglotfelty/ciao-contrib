@@ -56,7 +56,8 @@ case $hist in
     pfold "${file}${src}" - "${min}:${max}:1" > \
 	${ASCDS_WORK_PATH}/$$_period.fits
 
-    ds9_plot_blt "$ASCDS_WORK_PATH/$$_period.fits[cols period,sigma_rate]" "Period Fold" $ds9
+    ds9_plot_blt "$ASCDS_WORK_PATH/$$_period.fits[cols period,sigma_rate]" "Period Fold $$_period.fits" $ds9
+    outfile=$ASCDS_WORK_PATH/$$_period.fits
 
     ;;
     
@@ -67,8 +68,18 @@ case $hist in
 
     /bin/rm -f  $ASCDS_WORK_PATH/$$_foo.fits
 
-    ds9_plot_blt "$ASCDS_WORK_PATH/$$_lc.fits[cols time,count_rate]" "GL Lightcurve" $ds9 
-
+    ds9_plot_blt "$ASCDS_WORK_PATH/$$_lc.fits[cols time,count_rate]" "GL Lightcurve $$_lc.fits" $ds9 
+    outfile=$ASCDS_WORK_PATH/$$_lc.fits
         ;;
 esac
+
+
+echo "-----------------------------"
+echo `date`
+echo ""
+echo "infile: ${file}"
+echo "srcreg: ${srcreg}"
+echo "outfile: ${outfile}"
+echo ""
+
 
