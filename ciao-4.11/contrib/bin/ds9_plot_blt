@@ -49,8 +49,15 @@ def load_data(infile):
     return x_vals,x_label,y_vals,y_label
 
 
-def plot_data(access_point,x_vals, y_vals):
-    xpa = subprocess.Popen( [ "xpaset", access_point, "plot", "new"], stdin=subprocess.PIPE ) 
+def plot_data(access_point,x_vals, y_vals, title, x_label, y_label):
+    
+    cmd = ["xpaset", access_point, "plot", "new",
+           "{{{0}}}".format(title), 
+           "{{{0}}}".format(x_label), 
+           "{{{0}}}".format(y_label),
+           "xy"
+           ]
+    xpa = subprocess.Popen( cmd, stdin=subprocess.PIPE ) 
     for x,y in zip(x_vals, y_vals):
         pair = "{} {}\n".format(x,y)
         pb = pair.encode()
@@ -58,7 +65,7 @@ def plot_data(access_point,x_vals, y_vals):
     xpa.communicate()
     
 
-def label_plot(access_point, title, x_label, y_label):
+def pretty_plot(access_point):
     def xpa_cmd( access_point, command ):
         cc = ["xpaset", "-p", access_point ]
         cc.extend( command.split(' '))    
@@ -68,9 +75,6 @@ def label_plot(access_point, title, x_label, y_label):
     xpa_cmd(access_point, "plot view line no")
     xpa_cmd(access_point, "plot view step yes")
     xpa_cmd(access_point, "plot line step width 2")
-    xpa_cmd(access_point, "plot graph labels title {{{0}}}".format(title))
-    xpa_cmd(access_point, "plot graph labels xaxis {{{0}}}".format(x_label))
-    xpa_cmd(access_point, "plot graph labels yaxis {{{0}}}".format(y_label))
         
 
 if __name__ == '__main__':
@@ -79,8 +83,8 @@ if __name__ == '__main__':
     access_point = sys.argv[3]
 
     x_vals,x_label,y_vals,y_label = load_data(infile)
-    plot_data( access_point, x_vals, y_vals )
-    label_plot(access_point, title, x_label, y_label)
+    plot_data( access_point, x_vals, y_vals, title, x_label, y_label)
+    pretty_plot(access_point)
     
 
 
