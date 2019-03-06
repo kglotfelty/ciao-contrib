@@ -268,7 +268,7 @@ def plot_data(access_point,xx, ex, yy, ey, title, x_label, y_label):
     xpa_plot_cmd(access_point, "error color cornflowerblue")
     #xpa_plot_cmd(access_point, "error cap yes")
     xpa_plot_cmd(access_point, "color white")
-    
+    xpa_plot_cmd(access_point, "width 0")
 
 def plot_model(access_point,x_vals, y_vals):
     """Plot the model"""
