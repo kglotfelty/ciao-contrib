@@ -269,6 +269,9 @@ def plot_data(access_point,xx, ex, yy, ey, title, x_label, y_label):
     #xpa_plot_cmd(access_point, "error cap yes")
     xpa_plot_cmd(access_point, "color white")
     xpa_plot_cmd(access_point, "width 0")
+    xpa_plot_cmd(access_point, "legend yes")
+    xpa_plot_cmd(access_point, "legend position right")
+    xpa_plot_cmd(access_point, "name Observed")    
 
 def plot_model(access_point,x_vals, y_vals):
     """Plot the model"""
@@ -287,6 +290,10 @@ def plot_model(access_point,x_vals, y_vals):
     xpa_plot_cmd(access_point, "color orange")
     xpa_plot_cmd(access_point, "shape color orange")
     xpa_plot_cmd(access_point, "width 4")
+    xpa_plot_cmd(access_point, "name Model")
+    #xpa_plot_cmd(access_point, "legend yes")
+    #xpa_plot_cmd(access_point, "legend position right")
+
 
 d = sherpa.get_data_plot()
 m = sherpa.get_model_plot()
