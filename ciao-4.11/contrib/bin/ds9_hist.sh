@@ -1,6 +1,6 @@
 #!/bin/bash 
 # 
-#  Copyright (C) 2004-2008  Smithsonian Astrophysical Observatory
+#  Copyright (C) 2004-2008,2019  Smithsonian Astrophysical Observatory
 #
 #
 #  This program is free software; you can redistribute it and/or modify
