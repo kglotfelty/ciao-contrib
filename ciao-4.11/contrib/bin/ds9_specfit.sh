@@ -285,14 +285,12 @@ def plot_model(access_point,x_vals, y_vals):
         pb = pair.encode()
         xpa.stdin.write(pb)        
     xpa.communicate()
-    #xpa_plot_cmd(access_point, "shape none")
+    xpa_plot_cmd(access_point, "shape none")
     xpa_plot_cmd(access_point, "shape fill no")
     xpa_plot_cmd(access_point, "color orange")
     xpa_plot_cmd(access_point, "shape color orange")
-    xpa_plot_cmd(access_point, "width 4")
+    xpa_plot_cmd(access_point, "width 2")
     xpa_plot_cmd(access_point, "name Model")
-    #xpa_plot_cmd(access_point, "legend yes")
-    #xpa_plot_cmd(access_point, "legend position right")
 
 
 d = sherpa.get_data_plot()
