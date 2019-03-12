@@ -242,7 +242,7 @@ def xpa_plot_cmd( access_point, command ):
     xpa.communicate()
 
 
-def plot_data(access_point,xx, ex, yy, ey, title, x_label, y_label):
+def blt_plot_data(access_point,xx, ex, yy, ey, title, x_label, y_label):
     """Plot the data"""
     
     cmd = ["xpaset", access_point, "plot"]    
@@ -266,14 +266,14 @@ def plot_data(access_point,xx, ex, yy, ey, title, x_label, y_label):
     xpa_plot_cmd(access_point, "shape fill yes")
     xpa_plot_cmd(access_point, "shape color cornflowerblue")
     xpa_plot_cmd(access_point, "error color cornflowerblue")
-    #xpa_plot_cmd(access_point, "error cap yes")
-    xpa_plot_cmd(access_point, "color white")
     xpa_plot_cmd(access_point, "width 0")
     xpa_plot_cmd(access_point, "legend yes")
     xpa_plot_cmd(access_point, "legend position right")
-    xpa_plot_cmd(access_point, "name Observed")    
+    xpa_plot_cmd(access_point, "name {Data }")    
+    xpa_plot_cmd(access_point, "axis x grid no")
+    xpa_plot_cmd(access_point, "axis y grid no")
 
-def plot_model(access_point,x_vals, y_vals):
+def blt_plot_model(access_point,x_vals, y_vals):
     """Plot the model"""
     
     cmd = ["xpaset", access_point, "plot"]
@@ -292,14 +292,14 @@ def plot_model(access_point,x_vals, y_vals):
     xpa_plot_cmd(access_point, "width 2")
     xpa_plot_cmd(access_point, "name Model")
 
+_f = sherpa.get_fit_plot()
+_d = _f.dataplot
+_m = _f.modelplot
 
-d = sherpa.get_data_plot()
-m = sherpa.get_model_plot()
-x = (m.xhi+m.xlo)/2.0
+blt_plot_data( "${ds9}", _d.x, _d.xerr/2.0, _d.y, _d.yerr, 
+    "${spi}", "Energy [keV]", "Count Rate [c/s]")
 
-plot_data( "${ds9}", d.x, d.xerr/2.0, d.y, d.yerr, "${spi}", "Energy [keV]", "Count Rate [c/s]")
-
-plot_model( "${ds9}", x, m.y)
+blt_plot_model( "${ds9}", _m.x, _m.y)
 
 
 EOF
