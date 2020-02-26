@@ -681,10 +681,10 @@ hmenu CIAO tools (DAX)
     menu
     $param(imagefit); $env(ASCDS_CONTRIB)/bin/ds9_imgfit.sh $xpa $imgmodel $bkgmodel $getconf $imgfit_method $imgfit_stat |& $text
 
-#NEW#    Source Extent
-#NEW#    *
-#NEW#    menu
-#NEW#    $env(ASCDS_CONTRIB)/bin/ds9_extent "$filename" "$regions(ciao,strip)" |& $text
+    Source Extent
+    *
+    menu
+    $env(ASCDS_CONTRIB)/bin/ds9_extent $xpa |& $text
 
 
      ---
