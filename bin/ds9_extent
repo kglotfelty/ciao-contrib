@@ -18,55 +18,57 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
-import sys
-import os
-import subprocess as sp
-from tempfile import NamedTemporaryFile
-
 """
 TODO:
     - save|merge results?
 
 """
 
+import sys
+import os
+import subprocess as sp
+from tempfile import NamedTemporaryFile
+
+
+
 def check_for_single(ds9):
     """
     Check for multiple ds9 instances; there can be only 1 #Highlander
     """
 
-    xout = sp.run(["xpaget",ds9,"version"], check=True, 
-            stdout=sp.PIPE).stdout 
+    xout = sp.run(["xpaget", ds9, "version"], check=True,
+                  stdout=sp.PIPE).stdout
     ver = xout.decode().strip().split("\n")
 
     if len(ver) > 1 or 'BEGIN' in ver[0]:
-        raise RuntimeError("Multiple ds9's are running.  "+
-                    "Please close the others and try again.")
+        raise RuntimeError("Multiple ds9's are running.  " +
+                           "Please close the others and try again.")
 
 
-def parse_regions( xpa ):
+def parse_regions(xpa):
     """
-    
+    get region via xpa
     """
-    cmd = "xpaget {} regions -format ciao -system physical -strip"
+    cmd = "xpaget {} regions -format ciao -system physical -strip yes"
     cmd = cmd.format(xpa)
     cmd = cmd.split()
-    
-    xout = sp.run(cmd, check=True, stdout=sp.PIPE).stdout 
+
+    xout = sp.run(cmd, check=True, stdout=sp.PIPE).stdout
     reg_list = xout.decode().strip(";").split(";")
 
-    c_and_e = [x for x in reg_list 
-                if x.split('(')[0].lower() in ['circle', 'ellipse'] ]
+    c_and_e = [x for x in reg_list
+               if x.split('(')[0].lower() in ['circle', 'ellipse']]
 
     if len(c_and_e) != len(reg_list):
         print("WARNING: Only circle and ellipse shapes can be used.  Some regions have been omitted.")
 
     if len(c_and_e) == 0:
         raise RuntimeError("ERROR: Only circle and ellipse shapes can be used.  None found.")
-        
+
     return c_and_e
-    
-    
-def expand_region( reg ):
+
+
+def expand_region(reg):
     """
     We expand out the regions to be sure there is enough background
     for the negative part of the wavelet to fit well.
@@ -74,16 +76,17 @@ def expand_region( reg ):
 
     from region import CXCRegion
     r = CXCRegion(reg)
-    q=r.edit(stretch=2.0)
+    q = r.edit(stretch=3.0)
     return str(q)
 
 
-def get_vals( infile ):
+def get_vals(infile):
+    'Get vals from srcextent output'
     from pycrates import read_file
-    
+
     tab = read_file(infile)
     cols = tab.get_colnames()
-    
+
     vals = {}
     for c in cols:
         vals[c] = tab.get_column(c).values[0]
@@ -91,76 +94,71 @@ def get_vals( infile ):
     return vals
 
 
-def pretty_print( regs, vals ):
-    """
-    """    
+def pretty_print(regs, vals):
+    "Nicely format output"
     sys.stdout.write("\n\n")
-    
-    labels = [ "Region", "X Center", "Y Center", "Major", "Minor", "Angle" ]
-    ids = [ "REGION", "X", "Y", "MJR_AXIS_RAW", "MNR_AXIS_RAW", "POS_ANGLE_RAW"]
-    lfmts = " ".join([ "{:40s}", "{:>10s}", "{:>10s}", "{:>7s}", "{:>7s}", "{:>6s}"])
-    vfmts = [ "{:40s}", "{:10.2f}", "{:10.2f}", "{:7.3f}", "{:7.3f}", "{:6.2f}"]
 
-    sys.stdout.write(lfmts.format( *labels )+"\n")
+    labels = ["Region", "X Center", "Y Center", "Major", "Minor", "Angle"]
+    ids = ["REGION", "X", "Y", "MJR_AXIS_RAW", "MNR_AXIS_RAW", "POS_ANGLE_RAW"]
+    lfmts = " ".join(["{:40s}", "{:>10s}", "{:>10s}", "{:>7s}", "{:>7s}", "{:>6s}"])
+    vfmts = ["{:40s}", "{:10.2f}", "{:10.2f}", "{:7.3f}", "{:7.3f}", "{:6.2f}"]
+
+    sys.stdout.write(lfmts.format(*labels)+"\n")
     for rr in regs:
-        out = [vfmts[ii].format( vals[rr][ids[ii]]) for ii in range(len(ids))]
+        out = [vfmts[ii].format(vals[rr][ids[ii]]) for ii in range(len(ids))]
         sys.stdout.write(lfmts.format(*out)+"\n")
 
 
 def save_ds9_image(xpa):
-    ds9_file = NamedTemporaryFile(dir=os.environ["DAX_OUTDIR"], 
-        suffix="_ds9.fits", delete=False)
+    'save ds9 image as displayed'
+    ds9_file = NamedTemporaryFile(dir=os.environ["DAX_OUTDIR"],
+                                  suffix="_ds9.fits", delete=False)
 
-    cmd = [ 'xpaget', xpa, 'fits' ]
-    fits = sp.run( cmd, check=True, stdout=sp.PIPE).stdout    
-    open(ds9_file.name,"wb").write(fits)
-    
-    return(ds9_file.name)
+    cmd = ['xpaget', xpa, 'fits']
+    fits = sp.run(cmd, check=True, stdout=sp.PIPE).stdout
+    open(ds9_file.name, "wb").write(fits)
 
-
-ds9=sys.argv[1]
-check_for_single(ds9)
-
-
-infile=save_ds9_image(ds9)
-regs = parse_regions(ds9)
+    return ds9_file.name
 
 
 from ciao_contrib.runtool import make_tool
-mom = make_tool("imgmoment")
-ext = make_tool("srcextent")
-mkreg = make_tool("dmmakereg")
-cp = make_tool("dmcopy")
-
-savevals = {}
+ds9 = sys.argv[1]
+check_for_single(ds9)
+infile = save_ds9_image(ds9)
+regs = parse_regions(ds9)
 
 sys.stdout.write("--------------------------\n")
-
+savevals = {}
 for reg in regs:
-
-    sys.stdout.write( "\nProcessing region {} of {}".format( regs.index(reg)+1, len(regs) ))
+    sys.stdout.write("\nProcessing region {} of {}".format(regs.index(reg)+1, len(regs)))
     sys.stdout.flush()
-
-    tmpreg = NamedTemporaryFile( dir=os.environ["DAX_OUTDIR"], delete=False )
-    tmpout = NamedTemporaryFile( dir=os.environ["DAX_OUTDIR"], delete=False )
-    tmpimg = NamedTemporaryFile( dir=os.environ["DAX_OUTDIR"], delete=False )
 
     bigreg = expand_region(reg)
 
+    tmpimg = NamedTemporaryFile(dir=os.environ["DAX_OUTDIR"],
+                                suffix="_srcextent.img", delete=False)
+    cp = make_tool("dmcopy")
     cp("{}[(x,y)={}][bin x,y]".format(infile, bigreg), tmpimg.name, clobber=True)
 
+    mom = make_tool("imgmoment")
     mom.infile = cp.outfile
     mom()
-    
+
     try:
-        mkreg(region=reg, ker="fits", out=tmpreg.name, clobber=True, wcs=infile )
+        tmpreg = NamedTemporaryFile(dir=os.environ["DAX_OUTDIR"],
+                                    suffix="_srcextent.reg", delete=False)
+        mkreg = make_tool("dmmakereg")
+        mkreg(region=reg, ker="fits", out=tmpreg.name, clobber=True, wcs=infile)
 
         try:
-            tool_out=ext( srcfile=cp.outfile, outfile=tmpout.name, 
-                psffile="", regfile=tmpreg.name, shape="gaussian", 
-                x0=mom.x_mu, y0=mom.y_mu, srcsize=mom.xsig,
-                clobber=True)
-            vals = get_vals( tmpout.name )
+            tmpout = NamedTemporaryFile(dir=os.environ["DAX_OUTDIR"],
+                                        suffix="_srcextent.fits", delete=False)
+            ext = make_tool("srcextent")
+            tool_out = ext(srcfile=cp.outfile, outfile=tmpout.name,
+                           psffile="", regfile=tmpreg.name, shape="gaussian",
+                           x0=mom.x_mu, y0=mom.y_mu, srcsize=mom.xsig,
+                           clobber=True)
+            vals = get_vals(tmpout.name)
         except:
             from math import nan
             sys.stdout.write(" ERROR computing extent")
@@ -175,16 +173,14 @@ for reg in regs:
         savevals[reg] = vals
 
     finally:
-        if os.path.exists( tmpreg.name):
-            os.unlink( tmpreg.name )
-        if os.path.exists( tmpout.name):
-            os.unlink( tmpout.name )
-        if os.path.exists( tmpimg.name):
-            os.unlink( tmpimg.name )
+        if os.path.exists(tmpreg.name):
+            os.unlink(tmpreg.name)
+        if os.path.exists(tmpout.name):
+            os.unlink(tmpout.name)
+        if os.path.exists(tmpimg.name):
+            os.unlink(tmpimg.name)
 
 if os.path.exists(infile):
     os.unlink(infile)
 
-pretty_print( regs, savevals )
-
-
+pretty_print(regs, savevals)
