@@ -91,7 +91,7 @@ srcflux
           infile = acisf00635_repro_evt2.fits
              pos = 16:27:33.115 -24:41:15.51
          outroot = rhooph
-           bands = broad
+           bands = default
           srcreg = 
           bkgreg = 
          bkgresp = yes
@@ -674,7 +674,7 @@ Position                               0.5 - 1.2 keV                           1
 
 	</DESC>        
       </PARAM>
-      <PARAM name="bands" type="string" reqd="no" stacks="yes" def="broad" units="keV">
+      <PARAM name="bands" type="string" reqd="no" stacks="yes" def="default" units="keV">
 	<SYNOPSIS>Energy bands and characteristic energy value</SYNOPSIS>
 	<DESC>
 	  <PARA>
@@ -718,14 +718,19 @@ Position                               0.5 - 1.2 keV                           1
 		</ROW>
 	  </TABLE>
 	  
-	  <PARA title="CSC">
+      <PARA title="default"> 
+        The value "default" will select band="broad" for ACIS datasets
+        and band="wide" for HRC datasets.      
+      </PARA>
+      
+	  <PARA title="csc">
 	    The value "csc" can be used as a short form for the
 	    combination of "soft,medium,hard".
 	  </PARA>
       <PARA title="wide">
-        The "wide" energy band can only be used with HRC.
-      </PARA>
-        
+        HRC data can only use the "wide" energy band.  Using the default
+        band="default" will automatically select the wide energy band.
+      </PARA>        
 	  <PARA title="Explicit ranges">
 	    If you want to use different values to those of the CSC then
 	    you can use the format lo:hi:eff - where lo, hi and eff
@@ -1897,6 +1902,6 @@ bounds(region(my.reg))
       </PARA>
     </BUGS>
     
-    <LASTMODIFIED>February 2020</LASTMODIFIED>
+    <LASTMODIFIED>June 2020</LASTMODIFIED>
   </ENTRY>
 </cxchelptopics>
