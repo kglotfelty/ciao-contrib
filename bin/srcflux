@@ -115,7 +115,9 @@ def get_root( myparams, at_energy ):
     return myroot
 
 
-def run_roi( infile, fovfile, tmproot="/tmp", bkgmode='mul', bkgradius=3, bkgfunction='mul', bkgfactor=1 ):
+def run_roi( infile, fovfile, tmproot="/tmp", bkgmode='mul', 
+             bkgradius=3, bkgfunction='mul', bkgfactor=1,
+             evtfile=None ):
     """
     Create src and background regions for each source    
     """
@@ -130,7 +132,7 @@ def run_roi( infile, fovfile, tmproot="/tmp", bkgmode='mul', bkgradius=3, bkgfun
         roi.fovregion = ''
 
     roi.streakregion = ''
-    roi.outsrcfile = tmproot+r"%04d_reg.fits"
+    roi.outsrcfile = tmproot+r"%04d_tmpreg.fits"
     roi.group = 'exclude'     # overlap srcs are cut out
     roi.targetbkg = 'target'  # background only around this src
     roi.clobber = True
@@ -145,9 +147,15 @@ def run_roi( infile, fovfile, tmproot="/tmp", bkgmode='mul', bkgradius=3, bkgfun
     if rr:
         verb2(rr)
     # get the number of source regions
-
     nn = roi.num_srcs
-    files = [ delme(tmproot+r"_{:04d}_reg.fits".format(i+1)) for i in range(nn) ]
+    files = [ delme(tmproot+r"{:04d}_tmpreg.fits".format(i+1)) for i in range(nn) ]
+
+    import subprocess as sp
+    moo = ["rank_roi", evtfile, ",".join(files), tmproot+r"{:04d}_reg.fits",
+                    "method=max", "clobber=yes"]
+    sp.check_call( moo)
+    files = [ delme(tmproot+r"{:04d}_reg.fits".format(i+1)) for i in range(nn) ]
+    
     return files
 
 
@@ -184,7 +192,7 @@ def run_split_roi( myparams ):
 
     roi_files = run_roi( myroot+"srcs.fits", fov,
         tmproot=myroot, bkgradius=5.0,
-        bkgfactor=1.0 )
+        bkgfactor=1.0, evtfile=myparams.infile )
 
     mycmd = ["splitroi",
              myroot+r"????_reg.fits",
