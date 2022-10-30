@@ -1,0 +1,7 @@
+infile,f,a,"",,,"Input image or event file"
+pos,s,a,"",,,"Input position:  either filename or ra,dec"
+outfile,f,a,"",,,"Output table"
+psffile,f,h,"",,,"PSF Elliptical Radius Map"
+verbose,i,h,1,0,5,"Tool chatter level"
+clobber,b,h,no,,,"Removing existing files?"
+mode,s,h,"ql",,,
