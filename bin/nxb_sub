@@ -1,0 +1,709 @@
+#!/usr/bin/env python
+
+#
+# Copyright (C) 2022  Smithsonian Astrophysical Observatory
+#
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+
+import numpy as np
+import sys
+import os
+import math
+from typing import Dict, Tuple, List, Any
+from pycrates import *
+import paramio
+from ciao_contrib.logger_wrapper import initialize_logger, make_verbose_level, set_verbosity
+from ciao_contrib.param_wrapper import open_param_file
+from ciao_contrib.runtool import add_tool_history
+from pytransform import WCSTransform
+
+toolname = 'nxb_sub'
+__revision__ = '1 July 2022'
+
+# Set up the logging/verbose code
+initialize_logger(toolname)
+v0 = make_verbose_level(toolname, 0)
+v1 = make_verbose_level(toolname, 1)
+
+
+
+
+@np.vectorize
+def expected_sky_count(mu_n: float, k: int) -> float:
+    """
+    Calculates the mean number of sky counts for a region given the total number of events and the mean number of
+    background counts mu_n.
+    Args:
+        mu_n (float): Mean number of background counts for a certain region.
+        k (int): Total number of events for a certain region.
+    Returns:
+        mu_s_star (float): Mean number of science sky counts for the region.
+    """
+    # This is the subtraction algorithm
+    k = int(k)
+
+    # We could end up with zero counts input for certain applications.
+    # in that case there is 0 sky counts period with no uncertainty
+    if k == 0:
+        return 0
+    if mu_n == 0:
+        return k
+    k_arr = np.arange(0, k + 1)
+    ks_arr = k - k_arr
+
+    prob_arr = [math.exp(k * math.log(mu_n) - math.lgamma(k + 1) - mu_n) for k in k_arr]
+    mu_s_star = np.average(ks_arr, weights=prob_arr)
+
+    return mu_s_star
+
+
+def add_wcs(out_crate: IMAGECrate, wcs: WCSTransform, x_min: float, x_max: float, y_min: float, y_max: float):
+    """
+    Adds WCS keywords to the input image. These define the transformation from local coordinates to sky coordinates.
+    Also adds the TLMIN/MAX keywords, which define the valid range of values for X, Y.
+    Args:
+        out_crate (IMAGECrate): Pycrates IMAGECrate object that will have the WCS keywords added to it.
+        wcs (WCSTransform): Object holding all of WCS transformation values.
+        x_min (float): Valid X floor.
+        x_max (float): Valid X ceiling.
+        y_min (float): Valid Y floor.
+        y_max (float): Valid Y ceiling.
+    """
+    new_keys = {
+        'TLMIN1': x_min,
+        'TLMAX1': x_max,
+        'TLMIN2': y_min,
+        'TLMAX2': y_max,
+        'CTYPE1': wcs.get_parameter('CTYPE').get_value()[0],
+        'CTYPE2': wcs.get_parameter('CTYPE').get_value()[1],
+        'CUNIT1': 'deg',
+        'CUNIT2': 'deg',
+        'CRPIX1': wcs.get_parameter('CRPIX').get_value()[0],
+        'CRPIX2': wcs.get_parameter('CRPIX').get_value()[1],
+        'CRVAL1': wcs.get_parameter('CRVAL').get_value()[0],
+        'CRVAL2': wcs.get_parameter('CRVAL').get_value()[1],
+        'CDELT1': wcs.get_parameter('CDELT').get_value()[0],
+        'CDELT2': wcs.get_parameter('CDELT').get_value()[1]
+    }
+    for key in new_keys:
+        new_key = CrateKey()
+        new_key.name = key
+        new_key.value = new_keys[key]
+        add_key(out_crate, new_key)
+
+
+def make_image_sky_xy(x_col: np.array, y_col: np.array, event_crate: Crate) -> IMAGECrate:
+    """
+    This function takes an event list (usually produced by a filtering function by this same object)
+    and creates an image using the Sky X-Y coordinate system in these events. It also creates a header that has the
+    correct RA/DEC to X/Y mapping for your given projection.
+    Args:
+        x_col (np.array): The x positions of the events
+        y_col (np.array): The y positions of the events
+        event_crate (Crate): The event crate data object storing the header info that will be used for the new image
+    Returns:
+        new_crate (IMAGECrate): The new image containing the input X, Y data with an updated header
+    """
+    wcs = event_crate.get_transform('eqpos')
+
+    # Getting rid of events outside boundaries
+    x_min = event_crate.sky.x.get_tlmin()
+    x_max = event_crate.sky.x.get_tlmax()
+    y_min = event_crate.sky.y.get_tlmin()
+    y_max = event_crate.sky.y.get_tlmax()
+
+    boundary_mask = (x_col <= x_max) & \
+                    (y_col <= y_max) & \
+                    (x_col >= x_min) & \
+                    (y_col >= y_min)
+
+    # We may want to update with an option to change the TLMAX values
+    x_edges = np.arange(x_min - 0.5, x_max + 1)
+    y_edges = np.arange(y_min - 0.5, y_max + 1)
+
+    filtered_x = x_col[boundary_mask]
+    filtered_y = y_col[boundary_mask]
+
+    img, xx, yy = np.histogram2d(filtered_x, filtered_y, bins=[x_edges, y_edges])
+
+    new_data = CrateData()
+    new_data.values = img.transpose()
+    new_crate = IMAGECrate()
+    add_piximg(new_crate, new_data)
+    add_wcs(new_crate, wcs, x_min, x_max, y_min, y_max)
+
+    return new_crate
+
+
+class BaseNXBSub:
+    """
+    Contains the attributes and methods shared by all background subtraction methods (blank sky, blank sky w/ bins,
+    constant background).
+    """
+    def __init__(self, science_path: str, e_lo: float, e_hi: float, outdir: str, clobber: bool, bin_size: int = None, norme_lo: float = 9500, norme_hi: float = 12000):
+        """
+        Opens the input event file and extracts required keyword information. Initializes input parameters.
+        Args:
+            science_path (str): Path to the input science file which the background will be subtracted from
+            e_lo (float): Minimum energy value in event filter
+            e_hi (float): Maximum energy value in event filter
+            outdir (str): Path to the directory where the output files will be written
+            clobber (bool): If true any output files of the same location will be overwritten
+            bin_size (int): Size of sky bins in X-Y pixel units
+        """
+        self._science_filepath = science_path
+        science_dataset = read_dataset(science_path)
+        self._science_events_crate = science_dataset.get_crate('EVENTS')
+        # Have to use eqpos instead of X/Y to interface with DM
+        self._wcs = self._science_events_crate.get_transform('eqpos')
+        self._e_lo = e_lo
+        self._e_hi = e_hi
+        self._sci_exptime = self._science_events_crate.get_key_value('EXPOSURE')
+        self._sci_events_energy_mask = self.filter_data_energy(self._science_events_crate.get_column('energy').values,
+                                                               e_lo, e_hi)
+
+        self._xmin = self._science_events_crate.sky.x.get_tlmin()
+        self._xmax = self._science_events_crate.sky.x.get_tlmax()
+        self._ymin = self._science_events_crate.sky.y.get_tlmin()
+        self._ymax = self._science_events_crate.sky.y.get_tlmax()
+        self._base_file_name = os.path.basename(self._science_filepath)
+        self._outdir = os.path.dirname(self._science_filepath) if outdir == '-' else outdir
+        self._norme_lo = norme_lo
+        self._norme_hi = norme_hi
+        
+
+        if bin_size is not None:
+            self._xpos_arr = np.arange(self._xmin, self._xmax + bin_size, bin_size)
+            self._ypos_arr = np.arange(self._ymin, self._ymax + bin_size, bin_size)
+
+        self._ps_arr = None
+        self._clobber = clobber
+
+    @staticmethod
+    def filter_data_energy(data: np.array, elo: float = 500, ehigh: float = 8000) -> np.array:
+        """
+        Just a quick way to filter by energy mask
+        Args:
+            data (np.array): Input array to be filtered
+            elo (float): Low energy filter threshold
+            ehigh (float): High energy filter threshold
+        Returns:
+            (np.array): Truth array indicating where energy column is between low and high energy thresholds
+        """
+        mask1 = data >= elo
+        mask2 = data < ehigh
+
+        return mask1 & mask2
+
+    def write_output_files(self) -> Tuple[str, str]:
+        """
+        Writes the science image files with the background removed
+        """
+        full_sciimage = make_image_sky_xy(
+            self._science_events_crate.get_column('X').values[self._sci_events_energy_mask],
+            self._science_events_crate.get_column('Y').values[self._sci_events_energy_mask],
+            self._science_events_crate
+        )
+
+        # This is a simple random variable between 0 and 1
+        rands = np.random.uniform(size=len(self._ps_arr))
+
+        good_events = rands <= self._ps_arr
+
+        clean_data_x = self._science_events_crate.get_column('X').values[self._sci_events_energy_mask][good_events]
+        clean_data_y = self._science_events_crate.get_column('Y').values[self._sci_events_energy_mask][good_events]
+
+        full_probsubimage = make_image_sky_xy(clean_data_x, clean_data_y, self._science_events_crate)
+
+        image_hdu_name = self._base_file_name.replace(".fits", "_image_nobgsub.fits").replace('.gz', '')
+        probsub_hdu_name = self._base_file_name.replace(".fits", "_image_probbgsub.fits").replace('.gz', '')
+
+        write_file(full_sciimage, os.path.join(self._outdir, image_hdu_name), clobber=self._clobber)
+        write_file(full_probsubimage, os.path.join(self._outdir, probsub_hdu_name), clobber=self._clobber)
+
+        return os.path.join(self._outdir, image_hdu_name), os.path.join(self._outdir, probsub_hdu_name)
+
+
+class NXBSubFromConstantSB(BaseNXBSub):
+    """
+    Contains all of the attributes and methods required for removing background from a science image by using a
+    constant background value
+    """
+    def __init__(self, science_path: str, e_lo: float, e_hi: float, bin_size: int, bgsb: float, outdir: str,
+                 clobber: bool):
+        """
+        Calculates the sky bin area and mu_n the mean background counts for the region
+        Args:
+            science_path (str): Path to the input science file which the background will be subtracted from
+            e_lo (float): Minimum energy value in event filter
+            e_hi (float): Maximum energy value in event filter
+            bin_size (int): Size of sky bins in X-Y pixel units
+            bgsb (float): Constant background surface brightness in units of cts/s/arcsec**2
+            outdir (str): Path to the directory where the output files will be written
+            clobber (bool): If true any output files of the same location will be overwritten
+        """
+        super().__init__(science_path, e_lo, e_hi, outdir, clobber, bin_size)
+        crpix = self._wcs.get_parameter('CDELT').get_value()
+        xapp = np.abs(crpix[0] * 3600.)
+        yapp = np.abs(crpix[1] * 3600.)
+        area_arcsec = bin_size * bin_size * xapp * yapp
+        v1("Each sky bin has an area of %.2f arcsec**2 " % area_arcsec)
+
+        mu_n = area_arcsec * bgsb * self._sci_exptime
+        v1("%.2e, %.2f, %.2f, %.2f" % (bgsb, self._sci_exptime, area_arcsec, mu_n))
+        self._ps_arr = self.calc_blank_sky_nxb(mu_n)
+
+    def calc_blank_sky_nxb(self, mu_n: float) -> np.array:
+        """
+        Loop through each event, figure out total number of events at that chipx/y position,  and apply our
+        probabilistic NXB subtraction using the mean number of background counts for the region.
+        Args:
+            mu_n (float): Mean number of background counts for the region given the input constant background surface
+             brightness
+        Returns:
+            ps_arr (np.array): Probability that each event originates with a sky photon
+        """
+        x_filtered = self._science_events_crate.get_column('X').values[self._sci_events_energy_mask]
+        y_filtered = self._science_events_crate.get_column('Y').values[self._sci_events_energy_mask]
+
+        # Starting with negative values just to make sure failures are easy to ID
+        mu_s_arr = np.zeros_like(y_filtered) - 1.0
+        ps_arr = np.zeros_like(y_filtered) - 2.0
+
+        for i in range(len(self._xpos_arr) - 1):
+
+            # Doing the loop over sky X bins first and filtering once in X-direction to minimize run time
+            this_xmin = self._xpos_arr[i]
+            this_xmax = self._xpos_arr[i + 1]
+
+            if this_xmax > self._xmax:
+                this_xmax = self._xmax
+            evtmask_x1 = x_filtered >= this_xmin
+            evtmask_x2 = x_filtered < this_xmax
+            evtmask_x = evtmask_x1 & evtmask_x2
+
+            # Skipping this entire X-bin if there are no events at all Minimizes runtime
+            if np.count_nonzero(evtmask_x) == 0:
+                continue
+
+            for j in range(len(self._ypos_arr) - 1):
+                # After the event list is filtered in Sky X bins then we filter in Sky Y. This is to minimize the
+                # number of very long filters
+
+                this_ymin = self._ypos_arr[j]
+                this_ymax = self._ypos_arr[j + 1]
+
+                if this_ymax > self._ymax:
+                    this_ymax = self._ymax
+
+                evtmask_y1 = y_filtered >= this_ymin
+                evtmask_y2 = y_filtered < this_ymax
+
+                evtmask_y = evtmask_y1 & evtmask_y2
+
+                evtmask = evtmask_x & evtmask_y
+
+                n_cts = np.count_nonzero(evtmask)
+
+                # If no events in Sky X/Y bin move on immediately
+                if n_cts == 0:
+                    continue
+
+                # THe NXB subtraction
+                mu_s = expected_sky_count(mu_n, n_cts)
+                mu_s_arr[np.where(evtmask)] = mu_s
+
+                ps = mu_s / (mu_n + mu_s)
+                ps_arr[evtmask] = ps
+
+        return ps_arr
+
+
+class BaseBlankSkyNXBSub(BaseNXBSub):
+    """
+    Contains all of the attributes and methods shared by the blank sky and blank sky with binning background subtraction
+    methods
+    """
+    def __init__(self, science_path: str, stowed_path: str, e_lo: float, e_hi: float, outdir: str, clobber: bool,
+                 bin_size: int = None, norme_lo: float = 9500, norme_hi: float = 12000):
+        """
+        Reads in and extracts necessary values from the stowed 'blank sky' background file.
+        Args:
+            science_path (str): Path to the input science file which the background will be subtracted from
+            stowed_path (str): Path to the blank sky background events file for the region
+            e_lo (float): Minimum energy value in event filter
+            e_hi (float): Maximum energy value in event filter
+            bin_size (int): Size of sky bins in X-Y pixel units
+            outdir (str): Path to the directory where the output files will be written
+            clobber (bool): If true any output files of the same location will be overwritten
+        """
+        super().__init__(science_path, e_lo, e_hi, outdir, clobber, bin_size=bin_size, norme_lo = norme_lo, norme_hi = norme_hi)
+        self._stowed_filepath = stowed_path
+        background_dataset = read_dataset(stowed_path)
+        self._stowed_events_crate = background_dataset.get_crate('EVENTS')
+        self._stowed_exptime = self._stowed_events_crate.get_key('EXPOSURE').value
+
+        v1("Exposure times for sci and stowed data: %i and %i" % (self._sci_exptime, self._stowed_exptime))
+
+        sci_events_highe = self.filter_data_energy(self._science_events_crate.get_column('energy').values,
+                                                   self._norme_lo, self._norme_hi)
+        stowed_events_highe = self.filter_data_energy(self._stowed_events_crate.get_column('energy').values,
+                                                      self._norme_lo, self._norme_hi)
+
+        rate_sci = float(len(sci_events_highe)) / self._sci_exptime
+        rate_stowed = float(len(stowed_events_highe)) / self._stowed_exptime
+
+        # Normalizing the blank sky background counts by the 9.5-12 keV
+        # count rate ratio of sci/stowed events, in order to get the actual count rate in question
+        self._norm_nxb = rate_sci / rate_stowed
+        v1("Normalization for NXB is given as %.3f " % self._norm_nxb)
+
+        self._stowed_events_energy_mask = self.filter_data_energy(
+            self._stowed_events_crate.get_column('energy').values, e_lo, e_hi)
+
+        self._sci_chips = np.unique(self._science_events_crate.get_column('ccd_id').values)
+
+        # These will be given a value by the child classes
+        self._mu_s_arr, self._ps_arr = None, None
+
+    def write_output_files(self) -> Tuple[str, str, str, str]:
+        """
+        Writes the science image files with the background removed as well as the background images themselves
+        """
+        of1, of2 = super().write_output_files()
+
+        full_blankskyimage = make_image_sky_xy(
+            self._stowed_events_crate.get_column('X').values[self._stowed_events_energy_mask],
+            self._stowed_events_crate.get_column('Y').values[self._stowed_events_energy_mask],
+            self._stowed_events_crate
+        )
+
+        full_sciimage = read_dataset(of1).get_crate('Primary')
+
+        full_bgsub = full_sciimage.get_image().values - full_blankskyimage.get_image().values * \
+                     self._norm_nxb / self._stowed_exptime * self._sci_exptime
+
+        new_data = CrateData()
+        new_data.values = full_bgsub
+        full_bg_sub_image = IMAGECrate()
+        add_piximg(full_bg_sub_image, new_data)
+
+        # TODO: Should be using blank sky WCS here, right?
+        blanksky_wcs = self._stowed_events_crate.get_transform('eqpos')
+        add_wcs(full_bg_sub_image, blanksky_wcs,
+                self._stowed_events_crate.sky.x.get_tlmin(),
+                self._stowed_events_crate.sky.x.get_tlmax(),
+                self._stowed_events_crate.sky.y.get_tlmin(),
+                self._stowed_events_crate.sky.y.get_tlmax(),
+                )
+
+        blanksky_hdu_name = self._base_file_name.replace(".fits", "_image_blanksky.fits").replace('.gz', '')
+        standardsub_hdu_name = self._base_file_name.replace(".fits", "_image_blankskysub.fits").replace('.gz', '')
+
+        write_file(full_blankskyimage, os.path.join(self._outdir, blanksky_hdu_name), clobber=self._clobber)
+        write_file(full_bg_sub_image, os.path.join(self._outdir, standardsub_hdu_name), clobber=self._clobber)
+
+        return of1, of2, os.path.join(self._outdir, blanksky_hdu_name), os.path.join(self._outdir, standardsub_hdu_name)
+
+
+class NXBSubFromBlankSky(BaseBlankSkyNXBSub):
+    """
+    Contains all of the attributes and methods for the blank sky subtraction without binning
+    """
+    def __init__(self, science_path: str, stowed_path: str, e_lo: float, e_hi: float, outdir: str, clobber: bool):
+        """
+        Calculates mean number of background and science events for the region as well as the science event probability
+        array
+        Args:
+            science_path (str): Path to the input science file which the background will be subtracted from
+            stowed_path (str): Path to the blank sky background events file for the region
+            e_lo (float): Minimum energy value in event filter
+            e_hi (float): Maximum energy value in event filter
+            outdir (str): Path to the directory where the output files will be written
+            clobber (bool): If true any output files of the same location will be overwritten
+        """
+        super().__init__(science_path, stowed_path, e_lo, e_hi, outdir, clobber)
+        stowed_mun_dict = self.calc_mu_n()
+        self._mu_s_arr, self._ps_arr = self.calc_blank_sky_nxb(stowed_mun_dict)
+
+    def calc_mu_n(self) -> Dict[int, Dict[int, float]]:
+        """
+        Calculates mean number of background events for the region of good pixels in each row of each chip containing
+        science data. If there are no stowed events for a chip, it is skipped.
+            Returns:
+                stowed_mu_n_dict (dict): Contains the mean number of background events for each chip
+        """
+        stowed_mun_dict = {}
+
+        # Looping through chips of blank sky data
+        for this_chip in self._sci_chips:
+
+            # These are the minimally viable pixels that can be used - chipy = 2, 3, 4, ... 1023
+            y_pixels = np.arange(2, 1024)
+
+            # mu_n_avg is a 1-D NP array that contains expected BG counts per CHIPY
+            mu_n_avg = np.zeros(1025) - 2.
+
+            stowed_mask = self._stowed_events_crate.get_column('ccd_id').values == this_chip
+
+            if not any(stowed_mask):
+                v1("Stowed event list %s does not have events on CCD Chip %i. Skipping..." %
+                   (self._stowed_filepath, this_chip))
+                stowed_mun_dict[this_chip] = {y_pix: 0 for y_pix in y_pixels}
+                continue
+
+            stowed_chip = self._stowed_events_crate.get_column('chipy').values[stowed_mask &
+                                                                               self._stowed_events_energy_mask]
+
+            # Structure of BG is in the CHIPY direction for each CCD
+            # Expected background calculated per chipy on each ccd
+            for this_y in y_pixels:
+                # TODO: Abs value?
+                total_events = np.count_nonzero(np.abs(stowed_chip) == this_y)
+
+                # Expected counts are in the blank-sky/stowed data multiplied by norm and then taking the ratios of
+                # exposure times
+                this_mu_n = float(total_events) * self._norm_nxb / self._stowed_exptime * self._sci_exptime
+                mu_n_avg[this_y] = this_mu_n
+
+            # stowed_mun_dict is a dictionary that gets assigned 1-D arrays per CCD Chip
+            stowed_mun_dict[this_chip] = mu_n_avg
+
+        return stowed_mun_dict
+
+    def calc_blank_sky_nxb(self, stowed_mun_dict: Dict[int, Dict[int, float]]) -> Tuple[np.array, np.array]:
+        """
+        Loop through each event, figure out total number of events at that chipx/y position, estimate the NXB from
+        the stowed data and apply our probabilistic NXB subtraction.
+        Args:
+            stowed_mun_dict (dict): mu_n for each ccd and chipy
+        Returns:
+            mu_s_arr (np.array): Expectation value of number of events that originate from sky photons for each event
+            ps_arr (np.array): Probability that each event originates with a sky photon
+        """
+        # Starting with negative values just to make sure failures are easy to ID
+        chipy_filtered = self._science_events_crate.get_column('chipy').values[self._sci_events_energy_mask]
+        ccd_filtered = self._science_events_crate.get_column('ccd_id').values[self._sci_events_energy_mask]
+        mu_s_arr = np.zeros_like(chipy_filtered) - 1.0
+        ps_arr = np.zeros_like(chipy_filtered) - 2.0
+
+        # Now we loop through each event, figure out total number of events at that chipx/y position, estimate the NXB
+        # from the stowed data and apply our probabilistic NXB subtraction.
+        v1("Iterating through %i events" % (len(chipy_filtered)))
+
+        for i in range(len(chipy_filtered)):
+
+            # We will only calculate once per chipy/ccd values initially negative so if they are positive then the
+            # calculation has successfully been done for this event
+            if mu_s_arr[i] >= 0.:
+                continue
+
+            # Get ccd/chipy for this event
+            this_ccd = ccd_filtered[i]
+            this_chipy = chipy_filtered[i]
+
+            # This finds all events with the same chipy and ccd as the event in question
+            mask_ccd = ccd_filtered == this_ccd
+            mask_chipy = chipy_filtered == this_chipy
+
+            mask_evt = mask_ccd & mask_chipy
+
+            # Get the expectation value for chipy and ccd
+            mu_n_hist = stowed_mun_dict[this_ccd]
+            mu_n = mu_n_hist[this_chipy]
+
+            # Total counts in ccd/chipy
+            k = np.count_nonzero(mask_evt)
+
+            # We run the prob NXB algorithm on the entire ccd/chipy events
+            # Expectation values set by the same ccd/chipy events in the stowed data
+            mu_s = expected_sky_count(mu_n, k)
+
+            ps = mu_s / (mu_s + mu_n)
+
+            # This lets us apply it to every event with the same chipy and ccd in order to
+            # maximize speed. All events in same chipy/cdd have same probability.
+            # Orders of magnitude faster for large event lists
+            # Takes minutes to run instead of hours
+            mu_s_arr[np.where(mask_evt)] = mu_s
+            ps_arr[np.where(mask_evt)] = ps
+
+        return mu_s_arr, ps_arr
+
+
+class NXBSubFromBlankSkyBins(BaseBlankSkyNXBSub):
+    """
+    Contains all of the attributes and methods for the blank sky subtraction with binning
+    """
+    def __init__(self, science_path: str, stowed_path: str, e_lo: float, e_hi: float, bin_size: int, outdir: str,
+                 clobber: bool):
+        """
+        Calculates mean number of background and science events for the region as well as the science event probability
+        array
+        Args:
+            science_path (str): Path to the input science file which the background will be subtracted from
+            stowed_path (str): Path to the blank sky background events file for the region
+            e_lo (float): Minimum energy value in event filter
+            e_hi (float): Maximum energy value in event filter
+            bin_size (int): Size of sky bins in X-Y pixel units
+            outdir (str): Path to the directory where the output files will be written
+            clobber (bool): If true any output files of the same location will be overwritten
+        """
+        super().__init__(science_path, stowed_path, e_lo, e_hi, bin_size=bin_size, outdir=outdir, clobber=clobber)
+        self._ps_arr = self.calc_blank_sky_nxb_from_bins()
+
+    def calc_blank_sky_nxb_from_bins(self):
+        """
+        Loop through each event, figure out total number of events at that sky x/y position, estimate the NXB from
+        the stowed data and apply our probabilistic NXB subtraction.
+        Returns:
+            ps_arr (np.array): Probability that each event originates with a sky photon
+        """
+        stowed_y_filtered = self._stowed_events_crate.get_column('Y').values[self._stowed_events_energy_mask]
+        stowed_x_filtered = self._stowed_events_crate.get_column('X').values[self._stowed_events_energy_mask]
+
+        sci_y_filtered = self._science_events_crate.get_column('Y').values[self._sci_events_energy_mask]
+        sci_x_filtered = self._science_events_crate.get_column('X').values[self._sci_events_energy_mask]
+
+        # Starting with negative values just to make sure failures are easy to ID
+        mu_s_arr = np.zeros_like(sci_y_filtered) - 1.0
+        ps_arr = np.zeros_like(sci_y_filtered) - 2.0
+
+        for i in range(len(self._xpos_arr) - 1):
+            # Doing the loop over sky X bins first and filtering once in X-direction to minimize run time
+            this_xmin = self._xpos_arr[i]
+            this_xmax = self._xmax if self._xpos_arr[i + 1] > self._xmax else self._xpos_arr[i + 1]
+
+            evtmask_x1 = sci_x_filtered >= this_xmin
+            evtmask_x2 = sci_x_filtered < this_xmax
+            evtmask_x = evtmask_x1 & evtmask_x2
+
+            # Skipping this entire X-bin if there are no events at all, minimizes runtime
+            if np.count_nonzero(evtmask_x) == 0:
+                continue
+
+            bgmask_x1 = stowed_x_filtered >= this_xmin
+            bgmask_x2 = stowed_x_filtered < this_xmax
+            bgmask_x = bgmask_x1 & bgmask_x2
+
+            # After the event list is filtered in Sky X bins then we filter in Sky Y. This is to minimize the number of
+            # very long filters
+            for j in range(len(self._ypos_arr) - 1):
+                this_ymin = self._ypos_arr[j]
+                this_ymax = self._ymax if self._ypos_arr[j + 1] > self._ymax else self._ypos_arr[j + 1]
+
+                evtmask_y1 = sci_y_filtered >= this_ymin
+                evtmask_y2 = sci_y_filtered < this_ymax
+
+                evtmask_y = evtmask_y1 & evtmask_y2
+
+                evtmask = evtmask_x & evtmask_y
+
+                n_cts = np.count_nonzero(evtmask)
+
+                # If no events in Sky X/Y bin move on immediately
+                if n_cts == 0:
+                    continue
+
+                bgmask_y1 = stowed_y_filtered >= this_ymin
+                bgmask_y2 = stowed_y_filtered < this_ymax
+
+                bgmask_y = bgmask_y1 & bgmask_y2
+
+                bgmask = bgmask_x & bgmask_y
+
+                # Total counts is the count rate of blank sky, renormalized to match 9.5-12 keV
+                # count rate of science observation, multiplied by science exp time
+                mu_n = np.count_nonzero(bgmask) * self._norm_nxb * self._sci_exptime / self._stowed_exptime
+
+                # THe NXB subtraction
+                mu_s = expected_sky_count(mu_n, n_cts)
+                mu_s_arr[np.where(evtmask)] = mu_s
+
+                ps = mu_s / (mu_n + mu_s)
+                ps_arr[np.where(evtmask)] = ps
+
+        return ps_arr
+
+
+def get_par(argv: List[str]) -> Dict[str, Any]:
+    """
+    Parses and typecasts the command line input for the rest of the program
+    Args:
+        argv (list): List of arguments passed in to the command line
+    Returns:
+        params (dict): Key, value pair of parameter and type-casted value
+    """
+    params = {}
+    pfile = open_param_file(argv, toolname=toolname)['fp']
+    params['infile'] = paramio.pgetstr(pfile, 'infile')
+    params['elo'] = paramio.pgetd(pfile, 'elo')
+    params['ehi'] = paramio.pgetd(pfile, 'ehi')
+    params['bgevt'] = paramio.pgetstr(pfile, 'bgevt')
+    params['binsize'] = paramio.pgeti(pfile, 'binsize')
+    params['bgsb'] = paramio.pgetstr(pfile, 'bgsb')
+    params['outroot'] = paramio.pgetstr(pfile, 'outroot')
+    params['verbose'] = paramio.pgeti(pfile, 'verbose')
+    params['clobber'] = paramio.pgetb(pfile, 'clobber') == 1
+    params['normelo'] = paramio.pgetd(pfile, 'normelo')
+    params['normehi'] = paramio.pgetd(pfile, 'normehi')
+    
+    if params['bgevt'] == '-' and params['bgsb'] == '-':
+        paramio.paramclose(pfile)
+        raise ValueError('Must specify Blank Sky background event file path (bgevt) or constant background subtraction'
+                         ' (bgsb)')
+
+    if params['bgevt'] != '-' and params['bgsb'] != '-':
+        paramio.paramclose(pfile)
+        raise ValueError("Must specify only one background source parameter 'bgevt' or 'bgsb', not both.")
+
+    if params['bgsb'] != '-' and params['binsize'] == -1:
+        paramio.paramclose(pfile)
+        raise ValueError("Must specify parameter 'binsize' if using constant background subtraction bgsb")
+
+    params['bgsb'] = float(params['bgsb']) if params['bgsb'] != '-' else params['bgsb']
+
+    set_verbosity(params['verbose'])
+
+    paramio.paramclose(pfile)
+    return params
+
+
+def main():
+    params = get_par(sys.argv)
+
+    if params['bgsb'] != '':
+        nxb_sub = NXBSubFromConstantSB(params['evtfile'], params['elo'], params['ehi'], params['binsize'],
+                                       params['bgsb'], params['outdir'], params['clobber'])
+    elif params['binsize'] != -1:
+        nxb_sub = NXBSubFromBlankSkyBins(params['evtfile'], params['bgevt'], params['elo'], params['ehi'],
+                                         params['binsize'], params['outdir'], params['clobber'])
+    else:
+        nxb_sub = NXBSubFromBlankSky(params['evtfile'], params['bgevt'], params['elo'], params['ehi'], params['outdir'],
+                                     params['clobber'])
+
+    output_file_paths = nxb_sub.write_output_files()
+    v0(f'Wrote {len(output_file_paths)} output files to {os.path.dirname(output_file_paths[0])}:')
+    for file in output_file_paths:
+        v0(os.path.basename(file))
+
+    v1('Adding HISTORY keywords to output files')
+    add_tool_history(infiles=output_file_paths, toolname=toolname, toolversion=__revision__, params=params)
+
+
+if __name__ == '__main__':
+    main()

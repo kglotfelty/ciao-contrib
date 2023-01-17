@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE cxchelptopics SYSTEM "CXCHelp.dtd" [
+  <!ENTITY     pr  "unix&#x25; ">
+  <!ENTITY cltool "nxb_sub">
+]>
+<cxchelptopics>
+  <ENTRY key="&cltool;" context="tools"
+	 refkeywords="grating spectroscopy spectrum letg
+		      leg gratings wiggle tg_d hrc-s hrcs"
+	 seealsogroups="analysis tgtools detilt symmetrize">
+    <SYNOPSIS>
+      Straighten LETG/HRC-S spectra by applying tg_d adjustments.
+    </SYNOPSIS>
+
+    <SYNTAX>
+      <LINE>&cltool; evtfile elo ehi bgevt</LINE>
+        <LINE>&cltool; evtfile elo ehi bgevt binsize</LINE>
+        <LINE>&cltool; evtfile elo ehi binsize bgsub</LINE>
+    </SYNTAX>
+
+    <DESC>
+      <PARA>
+	&cltool; uses Poisson statistics to remove background events from the input event file given a 'blank sky'
+          background event file of the region or a constant background brightness parameter
+      </PARA>
+
+      <PARA>
+
+      </PARA>
+
+    </DESC>
+
+    <QEXAMPLELIST>
+      <QEXAMPLE>
+	<SYNTAX>
+
+	  <LINE>
+	    &cltool; input_evt2.fits 500 2000 stowed_bg.fits outdir=test_outdir clobber=yes
+	  </LINE>
+	</SYNTAX>
+
+	<DESC>
+	  <PARA>
+	    Run the program to remove background events from input_evt2.fits filtering on energies between 500 and 2000 eV
+          based on the background in the stowed_db.fits file. The output files will be written to test_outdir and
+          any files of the same name will be overwritten because of clobber.
+	  </PARA>
+	</DESC>
+
+    <SYNTAX>
+	  <LINE>
+	    &cltool; input_evt2.fits 500 2000 stowed_bg.fits binsize=10
+	  </LINE>
+	</SYNTAX>
+
+	<DESC>
+	  <PARA>
+	    Run the program to remove background events from input_evt2.fits filtering on energies between 500 and 2000 eV
+          based on the background in the stowed_db.fits file and a bin size of 10 pixels. The output files will be
+          written to the directory that the evtfile is in, and existing files will not be overwritten.
+	  </PARA>
+	</DESC>
+
+    <SYNTAX>
+	  <LINE>
+	    &cltool; input_evt2.fits 500 2000 bgevt=1e-7
+	  </LINE>
+	</SYNTAX>
+
+	<DESC>
+	  <PARA>
+	    Run the program to remove background events from input_evt2.fits filtering on energies between 500 and 2000 eV
+          based on a constant background surface brightness of 1e-7 cts/s/arcsec**2. The output files will be
+          written to the directory that the evtfile is in, and existing files will not be overwritten.
+	  </PARA>
+	</DESC>
+
+      </QEXAMPLE>
+    </QEXAMPLELIST>
+
+    <PARAMLIST>
+
+      <PARAM name="evtfile"  type="file"  reqd="yes"  stacks="no">
+	<DESC>
+	  <PARA>
+	    Path to event list which will have background removed. Must contain columns CCD_ID, CHIPY and ENERGY.
+          Must contain EXPOSURE and WCS keywords.
+	  </PARA>
+	</DESC>
+      </PARAM>
+
+      <PARAM name="elo" type="number" reqd="yes" def="500">
+	<DESC>
+	  <PARA>
+	    Low energy filter threshold in eV
+	  </PARA>
+	</DESC>
+      </PARAM>
+
+      <PARAM name="elo" type="number" reqd="yes" def="2000">
+	<DESC>
+	  <PARA>
+	    High energy filter threshold in eV
+	  </PARA>
+	</DESC>
+      </PARAM>
+
+    <PARAM name="bgevt"  type="file"  reqd="no"  stacks="no">
+	<DESC>
+	  <PARA>
+	    Path to stowed 'blank sky' background event list. Must contain columns CCD_ID, CHIPY and ENERGY.
+          Must contain EXPOSURE and WCS keywords.
+	  </PARA>
+	</DESC>
+      </PARAM>
+
+    <PARAM name="binsize" type="integer" reqd="no">
+	<DESC>
+	  <PARA>
+	    Size of sky bins in X-Y pixel units
+	  </PARA>
+	</DESC>
+      </PARAM>
+
+     <PARAM name="bgsb" type="number" reqd="no">
+	<DESC>
+	  <PARA>
+	    Assumed BG surface brightness in units of cts/s/arcsec2
+	  </PARA>
+	</DESC>
+      </PARAM>
+
+     <PARAM name="outdir" type="str" reqd="no">
+	<DESC>
+	  <PARA>
+	    Path to the directory that the output files will be written. Set to the directory of the evtfile by default
+	  </PARA>
+	</DESC>
+      </PARAM>
+
+    <PARAM name="verbose" type="integer"  def="0" min="0" max="1">
+      <SYNOPSIS>Tool chatter level</SYNOPSIS>
+      <DESC>
+        <PARA>
+      Controls the amount of information tool prints to the screen.
+        </PARA>
+      </DESC>
+
+    </PARAM>
+
+    <PARAM name="clobber" type="boolean"  def="no" >
+      <SYNOPSIS>Remove outfile if it already exists?</SYNOPSIS>
+    </PARAM>
+
+
+    </PARAMLIST>
+
+    <ADESC title="About Contributed Software">
+      <PARA>
+        This tool is not an official part of the CIAO release but is
+	made available as "contributed" software via the
+	<HREF link="https://cxc.harvard.edu/ciao/download/scripts/">CIAO scripts page</HREF>.
+        Please see this page for installation instructions.
+      </PARA>
+    </ADESC>
+
+    <BUGS>
+      <PARA>
+	See the
+	<HREF link="https://cxc.harvard.edu/ciao/bugs/">bugs page</HREF>
+	on the CIAO website for an up-to-date listing of known bugs.
+      </PARA>
+    </BUGS>
+
+    <LASTMODIFIED>December 2018</LASTMODIFIED>
+
+  </ENTRY>
+</cxchelptopics>
