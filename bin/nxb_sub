@@ -132,8 +132,8 @@ def make_image_sky_xy(x_col: np.array, y_col: np.array, event_crate: Crate) -> I
                     (y_col >= y_min)
 
     # We may want to update with an option to change the TLMAX values
-    x_edges = np.arange(x_min - 0.5, x_max + 1)
-    y_edges = np.arange(y_min - 0.5, y_max + 1)
+    x_edges = np.arange(x_min, x_max)
+    y_edges = np.arange(y_min, y_max)
 
     filtered_x = x_col[boundary_mask]
     filtered_y = y_col[boundary_mask]
