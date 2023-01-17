@@ -687,13 +687,13 @@ def main():
     params = get_par(sys.argv)
 
     if params['bgsb'] != '':
-        nxb_sub = NXBSubFromConstantSB(params['evtfile'], params['elo'], params['ehi'], params['binsize'],
-                                       params['bgsb'], params['outdir'], params['clobber'])
+        nxb_sub = NXBSubFromConstantSB(params['infile'], params['elo'], params['ehi'], params['binsize'],
+                                       params['bgsb'], params['outroot'], params['clobber'])
     elif params['binsize'] != -1:
-        nxb_sub = NXBSubFromBlankSkyBins(params['evtfile'], params['bgevt'], params['elo'], params['ehi'],
-                                         params['binsize'], params['outdir'], params['clobber'])
+        nxb_sub = NXBSubFromBlankSkyBins(params['infile'], params['bgevt'], params['elo'], params['ehi'],
+                                         params['binsize'], params['outroot'], params['clobber'])
     else:
-        nxb_sub = NXBSubFromBlankSky(params['evtfile'], params['bgevt'], params['elo'], params['ehi'], params['outdir'],
+        nxb_sub = NXBSubFromBlankSky(params['infile'], params['bgevt'], params['elo'], params['ehi'], params['outroot'],
                                      params['clobber'])
 
     output_file_paths = nxb_sub.write_output_files()
