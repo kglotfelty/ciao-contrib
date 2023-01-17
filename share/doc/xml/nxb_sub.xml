@@ -4,12 +4,14 @@
   <!ENTITY cltool "nxb_sub">
 ]>
 <cxchelptopics>
+
+  <!-- FIXME -->
+  
   <ENTRY key="&cltool;" context="tools"
-	 refkeywords="grating spectroscopy spectrum letg
-		      leg gratings wiggle tg_d hrc-s hrcs"
-	 seealsogroups="analysis tgtools detilt symmetrize">
+	 refkeywords="background non x-ray subtract"
+	 seealsogroups="bkgtools">
     <SYNOPSIS>
-      Straighten LETG/HRC-S spectra by applying tg_d adjustments.
+      TBD
     </SYNOPSIS>
 
     <SYNTAX>
@@ -46,6 +48,8 @@
           any files of the same name will be overwritten because of clobber.
 	  </PARA>
 	</DESC>
+    </QEXAMPLE>
+    <QEXAMPLE>
 
     <SYNTAX>
 	  <LINE>
@@ -60,6 +64,8 @@
           written to the directory that the evtfile is in, and existing files will not be overwritten.
 	  </PARA>
 	</DESC>
+    </QEXAMPLE>
+    <QEXAMPLE>
 
     <SYNTAX>
 	  <LINE>
@@ -89,7 +95,7 @@
 	</DESC>
       </PARAM>
 
-      <PARAM name="elo" type="number" reqd="yes" def="500">
+      <PARAM name="elo" type="real" reqd="yes" def="500">
 	<DESC>
 	  <PARA>
 	    Low energy filter threshold in eV
@@ -97,7 +103,7 @@
 	</DESC>
       </PARAM>
 
-      <PARAM name="elo" type="number" reqd="yes" def="2000">
+      <PARAM name="elo" type="real" reqd="yes" def="2000">
 	<DESC>
 	  <PARA>
 	    High energy filter threshold in eV
@@ -122,7 +128,7 @@
 	</DESC>
       </PARAM>
 
-     <PARAM name="bgsb" type="number" reqd="no">
+     <PARAM name="bgsb" type="real" reqd="no">
 	<DESC>
 	  <PARA>
 	    Assumed BG surface brightness in units of cts/s/arcsec2
@@ -130,7 +136,7 @@
 	</DESC>
       </PARAM>
 
-     <PARAM name="outdir" type="str" reqd="no">
+     <PARAM name="outdir" type="string" reqd="no">
 	<DESC>
 	  <PARA>
 	    Path to the directory that the output files will be written. Set to the directory of the evtfile by default
