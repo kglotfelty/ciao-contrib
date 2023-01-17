@@ -26,7 +26,7 @@ import math
 from typing import Dict, Tuple, List, Any
 from pycrates import *
 import paramio
-from ciao_contrib.logger_wrapper import initialize_logger, make_verbose_level, set_verbosity
+from ciao_contrib.logger_wrapper import initialize_logger, make_verbose_level, set_verbosity, handle_ciao_errors
 from ciao_contrib.param_wrapper import open_param_file
 from ciao_contrib.runtool import add_tool_history
 from pytransform import WCSTransform
@@ -181,7 +181,7 @@ class BaseNXBSub:
         self._ymin = self._science_events_crate.sky.y.get_tlmin()
         self._ymax = self._science_events_crate.sky.y.get_tlmax()
         self._base_file_name = os.path.basename(self._science_filepath)
-        self._outdir = os.path.dirname(self._science_filepath) if outdir == '-' else outdir
+        self._outdir = os.path.dirname(self._science_filepath) if outdir == '' else outdir
         self._norme_lo = norme_lo
         self._norme_hi = norme_hi
         
@@ -229,13 +229,13 @@ class BaseNXBSub:
 
         full_probsubimage = make_image_sky_xy(clean_data_x, clean_data_y, self._science_events_crate)
 
-        image_hdu_name = self._base_file_name.replace(".fits", "_image_nobgsub.fits").replace('.gz', '')
-        probsub_hdu_name = self._base_file_name.replace(".fits", "_image_probbgsub.fits").replace('.gz', '')
+        image_hdu_name =   "_image_nobgsub.fits"
+        probsub_hdu_name = "_image_probbgsub.fits"
 
-        write_file(full_sciimage, os.path.join(self._outdir, image_hdu_name), clobber=self._clobber)
-        write_file(full_probsubimage, os.path.join(self._outdir, probsub_hdu_name), clobber=self._clobber)
+        write_file(full_sciimage, self._outdir + image_hdu_name, clobber=self._clobber)
+        write_file(full_probsubimage, self._outdir + probsub_hdu_name, clobber=self._clobber)
 
-        return os.path.join(self._outdir, image_hdu_name), os.path.join(self._outdir, probsub_hdu_name)
+        return self._outdir + image_hdu_name, self._outdir + probsub_hdu_name
 
 
 class NXBSubFromConstantSB(BaseNXBSub):
@@ -411,13 +411,13 @@ class BaseBlankSkyNXBSub(BaseNXBSub):
                 self._stowed_events_crate.sky.y.get_tlmax(),
                 )
 
-        blanksky_hdu_name = self._base_file_name.replace(".fits", "_image_blanksky.fits").replace('.gz', '')
-        standardsub_hdu_name = self._base_file_name.replace(".fits", "_image_blankskysub.fits").replace('.gz', '')
+        blanksky_hdu_name = "_image_blanksky.fits"
+        standardsub_hdu_name = "_image_blankskysub.fits"
 
-        write_file(full_blankskyimage, os.path.join(self._outdir, blanksky_hdu_name), clobber=self._clobber)
-        write_file(full_bg_sub_image, os.path.join(self._outdir, standardsub_hdu_name), clobber=self._clobber)
+        write_file(full_blankskyimage, self._outdir + blanksky_hdu_name, clobber=self._clobber)
+        write_file(full_bg_sub_image, self._outdir + standardsub_hdu_name, clobber=self._clobber)
 
-        return of1, of2, os.path.join(self._outdir, blanksky_hdu_name), os.path.join(self._outdir, standardsub_hdu_name)
+        return of1, of2, self._outdir + blanksky_hdu_name, self._outdir + standardsub_hdu_name
 
 
 class NXBSubFromBlankSky(BaseBlankSkyNXBSub):
@@ -662,27 +662,27 @@ def get_par(argv: List[str]) -> Dict[str, Any]:
     params['normelo'] = paramio.pgetd(pfile, 'normelo')
     params['normehi'] = paramio.pgetd(pfile, 'normehi')
     
-    if params['bgevt'] == '-' and params['bgsb'] == '-':
+    if params['bgevt'] == '' and params['bgsb'] == '':
         paramio.paramclose(pfile)
         raise ValueError('Must specify Blank Sky background event file path (bgevt) or constant background subtraction'
                          ' (bgsb)')
 
-    if params['bgevt'] != '-' and params['bgsb'] != '-':
+    if params['bgevt'] != '' and params['bgsb'] != '':
         paramio.paramclose(pfile)
         raise ValueError("Must specify only one background source parameter 'bgevt' or 'bgsb', not both.")
 
-    if params['bgsb'] != '-' and params['binsize'] == -1:
+    if params['bgsb'] != '' and params['binsize'] == -1:
         paramio.paramclose(pfile)
         raise ValueError("Must specify parameter 'binsize' if using constant background subtraction bgsb")
 
-    params['bgsb'] = float(params['bgsb']) if params['bgsb'] != '-' else params['bgsb']
+    params['bgsb'] = float(params['bgsb']) if params['bgsb'] != '' else params['bgsb']
 
     set_verbosity(params['verbose'])
 
     paramio.paramclose(pfile)
     return params
 
-
+@handle_ciao_errors( toolname, __revision__)
 def main():
     params = get_par(sys.argv)
 
