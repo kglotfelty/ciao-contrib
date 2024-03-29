@@ -87,9 +87,9 @@ def parse_inputs( pars ):
     retval["limsens"] = ("yes" == pars["sensitivity"] )
 
     # TODO: Just comment out this condition to enable limsens
-    if pars["catalog"] in ["latest", "csc2", "csc2.1", "current"] and retval["limsens"] is True:
-        retval["limsens"] = False
-        verb0(f"WARNING: limiting sensitivity data is not available via this interface for {pars['catalog']}")
+    # ~ if pars["catalog"] in ["csc2", "csc2.1", "current"] and retval["limsens"] is True:
+        # ~ retval["limsens"] = False
+        # ~ verb0(f"WARNING: limiting sensitivity data is not available via this interface for {pars['catalog']}")
 
     if "none" == pars["download"]:
         retval["getfiles"] = False
