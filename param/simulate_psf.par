@@ -17,7 +17,7 @@ blur,r,h,0.07,0,,"Blur (marx.AspectBlur or psf_project_ray.xblur) [arcsec]"
 #
 readout_streak,b,h,"no",,,"MARX Simulate readout streak (ACIS)"
 pileup,b,h,"no",,,"MARX Run pileup module (ACIS)"
-ideal,b,h,"yes",,,"Should MARX use idealized detectors (QE=1) be used?"
+ideal,b,h,"no",,,"Should MARX use idealized detectors (QE=1) be used?"
 extended,b,h,"yes",,,"Should MARX detectors be extended beyond their physical edges?"
 #
 binsize,r,h,1,0,,"Image bin size [pix]"

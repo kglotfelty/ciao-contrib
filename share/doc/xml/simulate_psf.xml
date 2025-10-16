@@ -80,7 +80,7 @@
          </SYNTAX>
         <DESC>
             <PARA>
-          This example is to setup SAOTrace and MARX (tcsh shell) .  
+          This example is to setup SAOTrace and MARX (tcsh shell) .
           This example needs to performed
           once before the following examples are expected to work.
         </PARA>
@@ -171,8 +171,8 @@
             unix% simulate_psf infile=acisf00635_repro_evt2.fits
                ra=246.88628 dec=-24.556762 \
             </LINE>
-            <LINE>                
-            spectrum=source.dat outroot=abs_powlaw flux=0.5 
+            <LINE>
+            spectrum=source.dat outroot=abs_powlaw flux=0.5
             simulator=saotrace projector=psf_project_ray</LINE>
         </SYNTAX>
         <DESC>
@@ -595,7 +595,7 @@
             </DESC>
           </PARAM>
 
-          <PARAM name="ideal" type="boolean" def="yes" reqd="no">
+          <PARAM name="ideal" type="boolean" def="no" reqd="no">
             <SYNOPSIS>Should MARX simulate ideal detectors?</SYNOPSIS>
             <DESC>
               <PARA>This parameter can be set to simulate events
@@ -603,7 +603,6 @@
               when using the PSF in conjunction with an exposure map
               (eg when doing 2D fitting); otherwise the exposure variations maybe applied twice.
               </PARA>
-
 
               <PARA>This parameter has no effect for projector=psf_project_ray.</PARA>
             </DESC>
@@ -993,6 +992,13 @@ $ marx @@${outroot}_iNNNN_marx.par
       </PARA>
     </ADESC>
 
+    <ADESC title="Changes in the scripts 1.18.0 (December 2025) release">
+      <PARA>The default value for the ideal parameter has change to ideal=no.
+      This will allow marx to simulate the energy dependencies of the
+      mirror and detectors.
+      </PARA>
+    </ADESC>
+
     <ADESC title="Changes in the scripts 4.17.2 (September 2025) release">
       <PARA>
         Support has been added to use <HREF
@@ -1120,7 +1126,7 @@ $ marx @@${outroot}_iNNNN_marx.par
       </PARA>
     </BUGS>
 
-   <LASTMODIFIED>August 2025</LASTMODIFIED>
+   <LASTMODIFIED>December 2025</LASTMODIFIED>
 
   </ENTRY>
 </cxchelptopics>
