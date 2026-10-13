@@ -18,37 +18,34 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
-import pycrates as pc
-import numpy as np
+"""
+Generate a photometric light curve for a Chandra target which was
+observed using an ACA monitor window.
+
+Converted from the original S-Lang version:
+
+  $Id: monitor_photom,v 1.0 2005/06/23 taldcroft Exp $
+"""
 
 import sys
 from types import SimpleNamespace
 
-import ciao_contrib.logger_wrapper as lw
+import numpy as np
+import pycrates as pc
+from crates_contrib.utils import write_columns
 
-toolname = "monitor_photom"
+import ciao_contrib.logger_wrapper as lw
+from ciao_contrib.param_soaker import get_params
+from ciao_contrib._tools.fileio import outfile_clobber_checks
+from ciao_contrib.runtool import add_tool_history
+
+TOOLNAME = "monitor_photom"
 __revision__ = "13 October 2026"
 
-lw.initialize_logger(toolname)
-lgr = lw.get_logger(toolname)
-verb0 = lgr.verbose0
+lw.initialize_logger(TOOLNAME)
+lgr = lw.get_logger(TOOLNAME)
 verb1 = lgr.verbose1
 verb2 = lgr.verbose2
-verb3 = lgr.verbose3
-verb5 = lgr.verbose5
-
-#
-#
-# From the original S-Lang version:
-#
-#
-#%
-#% $Id: monitor_photom,v 1.0 2005/06/23 taldcroft Exp $
-#%
-#% Purpose: Generate a photometric light curve for a Chandra
-#%	   target which was observed using an ACA monitor
-#%	   window.
-#%
 
 
 def get_data(infile):
@@ -144,8 +141,10 @@ def get_edge_pixels(img_size):
         r = [0, 0, 0, 0, 5, 5, 5, 5, 1, 2, 3, 4, 1, 2, 3, 4]
         c = [1, 2, 3, 4, 1, 2, 3, 4, 0, 0, 0, 0, 5, 5, 5, 5]
     elif 8 == img_size:
-        r = [0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7, 7, 7, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 6, 1, 6 ]
-        c = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7, 1, 1, 6, 6 ]
+        r = [0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7, 7, 7,
+             1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 6, 1, 6]
+        c = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
+             0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7, 1, 1, 6, 6]
     else:
         raise RuntimeError("Image data must be 6x6 or 8x8")
 
@@ -163,7 +162,9 @@ def check_dither(dat, rc0):
     dcol = np.max(np.abs(dat.img_col0 - dat.img_col0[0]))
     motion = max(drow, dcol)
     if motion > rc0:
-        raise ValueError(f"The monitor window moves by up to {motion} pixels, which is larger than max_dither_motion={rc0}.  Please re-run with max_dither_motion={motion} (or larger).")
+        raise ValueError(f"The monitor window moves by up to {motion} pixels, "
+                         f"which is larger than max_dither_motion={rc0}.  "
+                         f"Please re-run with max_dither_motion={motion} (or larger).")
 
 
 def get_offsets(dat, rc0):
@@ -184,33 +185,60 @@ def stack_dark_current_data(dat, img_corr, rc0):
         % Make a stack of dark current measurements
         %---------------------------------------------------------------------
 
-    Returns a 2D array of the number of measurements for each pixel,
-    and the dark current measurements for each pixel stored as
-    1D arrays of the (row,col) pixel locations and the values.
+    Returns the dark current measurements as 1D arrays of the
+    (row,col) pixel locations, in the region of the CCD that
+    completely contains all the monitor window data, and the values.
     """
-    img_size = dat.img_raw.shape[1]
-    sz = 2*rc0 + img_size  # Size of pixel region on CCD that completely contains all mon. window data
-
-    r, c = get_edge_pixels(img_size)
+    r, c = get_edge_pixels(dat.img_raw.shape[1])
 
     verb1("Stacking dark current data...")
 
     rowoff, coloff = get_offsets(dat, rc0)
-    r0 = rowoff[:, np.newaxis] + r     # [n_images, n_edge_pixels]
-    c0 = coloff[:, np.newaxis] + c
-    vals = img_corr[:, r, c]
+    dark_row = (rowoff[:, np.newaxis] + r).ravel()   # [n_images * n_edge_pixels]
+    dark_col = (coloff[:, np.newaxis] + c).ravel()
+    dark = img_corr[:, r, c].ravel()
 
-    dark_row = r0.ravel()
-    dark_col = c0.ravel()
-    dark = vals.ravel()
-
-    n_dark = np.zeros([sz, sz], dtype=np.int32)
-    np.add.at(n_dark, (dark_row, dark_col), 1)
-
-    return dark_row, dark_col, dark, n_dark
+    return dark_row, dark_col, dark
 
 
-def make_median_dark_current(dat, img_corr, dark_row, dark_col, dark, n_dark, pars):
+def median_by_pixel(dark_row, dark_col, dark, shape, min_count):
+    """
+    Median of the dark current measurements for each pixel which
+    has at least min_count measurements; other pixels are set to
+    -9999.
+    """
+
+    # Sort the measurements by pixel and then by value; the median is
+    # then the middle value(s) of each pixel's block of values.
+    pixel = np.ravel_multi_index((dark_row, dark_col), shape)
+    sorted_dark = dark[np.lexsort((dark, pixel))]
+
+    n_dark = np.bincount(pixel, minlength=np.prod(shape))
+    start = np.cumsum(n_dark) - n_dark
+    lo = start + (n_dark - 1) // 2
+    hi = start + n_dark // 2
+
+    has_dark = (n_dark >= min_count) & (n_dark > 0)
+    median_dark = np.full(n_dark.shape, -9999.0)
+    median_dark[has_dark] = (sorted_dark[lo[has_dark]] + sorted_dark[hi[has_dark]]) / 2.0
+
+    return median_dark.reshape(shape)
+
+
+def report_warm_pixels(dat, median_dark, warm_dark_limit, rc0):
+    """
+    List the warm pixels, using CCD coordinates.
+    """
+
+    # Transpose so warm pixels are reported in column, row order
+    for c0, r0 in np.argwhere((median_dark > warm_dark_limit).T):
+        r_ccd = int(r0 - rc0 + dat.img_row0[0])
+        c_ccd = int(c0 - rc0 + dat.img_col0[0])
+        verb1(f"Warm pixel at CCD (row,col) = ({r_ccd},{c_ccd})\t "
+              f"Dark current (e-) = {median_dark[r0,c0]}")
+
+
+def make_median_dark_current(dat, img_corr, dark_data, pars):
     """
 
     %---------------------------------------------------------------------
@@ -218,8 +246,8 @@ def make_median_dark_current(dat, img_corr, dark_row, dark_col, dark, n_dark, pa
     % min_dark_measurements measurements
     %---------------------------------------------------------------------
 
+    dark_data is the (row, col, value) arrays from stack_dark_current_data.
     """
-    min_dark_measurements = int(pars["min_dark_meas"])
     min_dark_limit = float(pars["min_dark_limit"])
     dark_ratio = float(pars["dark_ratio"])        # hot limit as a fraction of image counts
     rc0 = int(pars["max_dither_motion"]) # Maximum possible dither motion in ACA pixels
@@ -230,27 +258,11 @@ def make_median_dark_current(dat, img_corr, dark_row, dark_col, dark, n_dark, pa
     verb1(f"Average counts  (e-) = {avg_cts}")
     verb1(f"Warm dark limit (e-) = {warm_dark_limit}")
 
-    # Sort the measurements by pixel and then by value; the median is
-    # then the middle value(s) of each pixel's block of values.
-    sz = n_dark.shape[0]
-    pixel = np.ravel_multi_index((dark_row, dark_col), n_dark.shape)
-    sorted_dark = dark[np.lexsort((dark, pixel))]
+    # Size of pixel region on CCD that completely contains all mon. window data
+    sz = 2*rc0 + dat.img_raw.shape[1]
+    median_dark = median_by_pixel(*dark_data, (sz, sz), int(pars["min_dark_meas"]))
 
-    counts = n_dark.ravel()
-    start = np.cumsum(counts) - counts
-    lo = start + (counts - 1) // 2
-    hi = start + counts // 2
-
-    has_dark = (n_dark >= min_dark_measurements) & (n_dark > 0)
-    median_dark = np.full([sz, sz], -9999.0)
-    median_dark[has_dark] = (sorted_dark[lo.reshape(sz, sz)[has_dark]] +
-                             sorted_dark[hi.reshape(sz, sz)[has_dark]]) / 2.0
-
-    # Transpose so warm pixels are reported in column, row order
-    for c0, r0 in np.argwhere((median_dark > warm_dark_limit).T):
-        r_ccd = int(r0 - rc0 + dat.img_row0[0])
-        c_ccd = int(c0 - rc0 + dat.img_col0[0])
-        verb1(f"Warm pixel at CCD (row,col) = ({r_ccd},{c_ccd})\t Dark current (e-) = {median_dark[r0,c0]}")
+    report_warm_pixels(dat, median_dark, warm_dark_limit, rc0)
 
     # Calculate the median reported dark current
     avg_median_dark = np.median(dat.aca_comp_bkg_avg)
@@ -279,9 +291,9 @@ def subtract_dark(dat, img_corr, rc0, median_dark):
 
 def write_output(dat, img_sub, outfile, clobber ):
     """
+    Write out the light curve (counts, count rate, and magnitude)
+    along with the dark-subtracted images.
     """
-
-    from crates_contrib.utils import write_columns
 
     counts = np.sum( img_sub, axis=(1,2) )
     mag0 = 10.32                # e-
@@ -297,21 +309,19 @@ def write_output(dat, img_sub, outfile, clobber ):
     mag = mag.astype(np.float32)
     img_sub = img_sub.astype(np.float32)
 
-    clb = ('yes' == clobber)
+    clb = clobber == 'yes'
     write_columns( outfile, dat.time, counts, cnt_rate, mag, img_sub,
         colnames=["time", "counts", "count_rate", "mag", "img_sub"],
         clobber=clb, format="fits" )
 
 
-@lw.handle_ciao_errors( toolname, __revision__)
+@lw.handle_ciao_errors( TOOLNAME, __revision__)
 def main():
     """
+    Run the tool.
     """
-    from ciao_contrib.param_soaker import get_params
-    from ciao_contrib._tools.fileio import outfile_clobber_checks
-    from ciao_contrib.runtool import add_tool_history
 
-    pars = get_params(toolname, "rw", sys.argv,
+    pars = get_params(TOOLNAME, "rw", sys.argv,
          verbose={"set":lw.set_verbosity, "cmd":verb1} )
 
     outfile_clobber_checks(pars["clobber"], pars["outfile"] )
@@ -322,22 +332,16 @@ def main():
 
     img_corr = cosmic_ray_removal( dat )
 
-    dark_row, dark_col, dark, n_dark = stack_dark_current_data(dat, img_corr, rc0)
+    dark_data = stack_dark_current_data(dat, img_corr, rc0)
 
-    median_dark = make_median_dark_current(dat, img_corr, dark_row, dark_col,
-                                           dark, n_dark, pars)
+    median_dark = make_median_dark_current(dat, img_corr, dark_data, pars)
 
     img_sub = subtract_dark( dat, img_corr, rc0, median_dark )
 
     write_output( dat, img_sub, pars["outfile"], pars["clobber"] )
 
-    add_tool_history( pars["outfile"], toolname, pars, toolversion=__revision__)
+    add_tool_history( pars["outfile"], TOOLNAME, pars, toolversion=__revision__)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as E:
-        print("\n# "+toolname+" ("+__revision__+"): ERROR "+str(E)+"\n", file=sys.stderr)
-        sys.exit(1)
-    sys.exit(0)
+    main()
